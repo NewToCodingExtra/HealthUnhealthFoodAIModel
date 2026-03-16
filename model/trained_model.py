@@ -92,7 +92,7 @@ health_score = health_score + np.random.normal(0, 10, size=n) # adding random no
 #     labels=['Unhealthy', 'Healthy']
 # )
 
-health_label = pd.Series(np.where(health_score > 0.0, 'Healthy', 'Unhealthy'))
+health_label = pd.Series(np.where(health_score > -30, 'Healthy', 'Unhealthy'))
 
 # creating dataframe with all the nutrition facts
 df = pd.DataFrame({
@@ -115,6 +115,10 @@ df = pd.DataFrame({
 encoder = LabelEncoder()
 #convert label into numeric values (unhealthy = 0 and healthy = 1)
 df['health_label'] = encoder.fit_transform(df['health_label'])
+
+# LabelEncoder sorts alphabetically: Healthy=0, Unhealthy=1
+# Flip so Healthy=1 and Unhealthy=0 (matches prediction display in test files)
+df['health_label'] = 1 - df['health_label']
 
 #separating core features and optional features
 #only core features
@@ -141,7 +145,7 @@ X_train_core, X_test_core, y_train_core, y_test_core = train_test_split(
 
 # this line creates a logistic regression model with a maximum of 1000 iterations, this is how we train our model to make predictions based on the data we give it.
 # this model is strong if optional features are not filled, but it is weak if optional features are filled, since it relies on core features to make predictions, so if optional features are filled, it will not perform well.                     
-model_core = LogisticRegression(max_iter=1000)
+model_core = LogisticRegression(max_iter=1000, class_weight='balanced')
 
 #training the model using only 8000(80% of samples) train data (core features only)
 model_core.fit(X_train_core, y_train_core)
@@ -170,7 +174,7 @@ X_train_all, X_test_all, y_train_all, y_test_all = train_test_split(
 
 # this line creates a logistic regression model with a maximum of 1000 iterations, this is how we train our model to make predictions based on the data we give it.
 # this model is strong if optional features are filled, but it is weak if optional features are not filled, since it relies on all features to make predictions, so if optional features are not filled, it will not perform well.
-model_all = LogisticRegression(max_iter=1000)
+model_all = LogisticRegression(max_iter=1000, class_weight='balanced')
 
 #training the model using all features (core + optional)
 model_all.fit(X_train_all, y_train_all)
