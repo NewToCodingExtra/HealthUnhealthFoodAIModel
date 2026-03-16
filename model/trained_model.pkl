@@ -7,3 +7,103 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
+# python -m pip install --upgrade pandas numpy matplotlib scikit-learn 
+# run this on terminal
+
+np.random.seed(42)
+
+#number of samples
+n = 10_000
+
+#declares core or optional features (can add more optional features later)
+core_features = ["calories", "sugar", "fat", "fiber", "protein", "sodium", "cholesterol", "saturated_fat"]
+optional_features = ["vitamin_c", "calcium", "added_sugar", "trans_fat"]
+
+#Considered as healthy nutrition facts (n//2) (healthy = 5000 and unhealthy = 5000)
+healthy_calories = np.random.randint(50, 300, size=n//2) #low to medium means healthy
+healthy_sugar = np.random.randint(0, 15, size=n//2) #low means healthy
+healthy_fat = np.random.randint(0, 10, size=n//2) #low means healthy
+healthy_fiber = np.random.randint(3, 10, size=n//2) #high means healthy
+healthy_protein = np.random.randint(3, 20, size=n//2) #high means healthy
+healthy_sodium = np.random.randint(0, 5, size=n//2) #low means healthy
+healthy_cholesterol = np.random.randint(0, 50, size=n//2) #low means healthy
+healthy_saturated_fat = np.random.randint(0, 3, size=n//2) #low means healthy
+
+healthy_vitamin_c = np.random.randint(10, 100, size=n//2) #high means healthy
+healthy_calcium = np.random.randint(50, 300, size=n//2) #high means healthy
+healthy_added_sugar = np.random.randint(0, 5, size=n//2) #low means healthy
+healthy_trans_fat = np.random.randint(0, 1, size=n//2) #low means healthy
+
+#Considered as unhealthy nutrition facts
+unhealthy_calories = np.random.randint(300, 700, size=n//2) #high  means unhealthy
+unhealthy_sugar = np.random.randint(15, 50, size=n//2) #high means unhealtthy
+unhealthy_fat = np.random.randint(10, 35, size=n//2) #high means unhealthy
+unhealthy_fiber = np.random.randint(0, 3, size=n//2) #low means unhealthy
+unhealthy_protein = np.random.randint(0, 15, size=n//2) #low means unhealthy
+unhealthy_sodium = np.random.randint(400, 1500, size=n//2) #high means unhealty
+unhealthy_cholesterol = np.random.randint(50, 250, size=n//2) #high means unhealthy
+unhealthy_saturated_fat = np.random.randint(3, 20, size=n//2) #high means unhealthy
+
+unhealthy_vitamin_c = np.random.randint(0, 50, size=n//2) #low means unhealthy
+unhealthy_calcium = np.random.randint(0, 150, size=n//2) #low means unhealthy
+unhealthy_added_sugar = np.random.randint(5, 30, size=n//2) #high means unhealthy
+unhealthy_trans_fat = np.random.randint(0, 5, size=n//2) #high means unhealthy
+
+
+#meging healthy and unhealthy ranges
+calories = np.concatenate([healthy_calories, unhealthy_calories])
+sugar = np.concatenate([healthy_sugar, unhealthy_sugar])
+fat = np.concatenate([healthy_fat, unhealthy_fat])
+fiber = np.concatenate([healthy_fiber, unhealthy_fiber])
+protein = np.concatenate([healthy_protein, unhealthy_protein])
+sodium = np.concatenate([healthy_sodium, unhealthy_sodium])
+cholesterol = np.concatenate([healthy_cholesterol, unhealthy_cholesterol])
+saturated_fat = np.concatenate([healthy_saturated_fat, unhealthy_saturated_fat])
+
+vitamin_c = np.concatenate([healthy_vitamin_c, unhealthy_vitamin_c])
+calcium = np.concatenate([healthy_calcium, unhealthy_calcium])
+added_sugar = np.concatenate([healthy_added_sugar, unhealthy_added_sugar])
+trans_fat = np.concatenate([healthy_trans_fat, unhealthy_trans_fat])
+
+health_score = (
+    fiber * 0.25 + 
+    protein * 0.2 + 
+    vitamin_c * 0.1 + 
+    calcium * 0.05 -
+    calories * 0.1 - 
+    sugar * 0.2 - 
+    fat * 0.15 - 
+    sodium * 0.05 -
+    cholesterol * 0.05 -
+    saturated_fat * 0.05 -
+    added_sugar * 0.05 -
+    trans_fat * 0.05
+)
+
+health_label = pd.qcut(
+    health_score,
+    q=2,
+    labels=['Unhealthy', 'Healthy']
+)
+
+df = pd.DataFrame({
+    "calories": calories,
+    "sugar": sugar,
+    "fat": fat,
+    "fiber": fiber,
+    "protein": protein,
+    "sodium": sodium,
+    "cholesterol": cholesterol,
+    "saturated_fat": saturated_fat,
+    "vitamin_c": vitamin_c,
+    "calcium": calcium,
+    "added_sugar": added_sugar,
+    "trans_fat": trans_fat,
+    "health_label" : health_label
+})
+
+# Summary stats for unhealthy foods
+print(df[df["health_label"] == "Unhealthy"].describe())
+
+# Check min/max of key features
+print(df[df["health_label"] == "Unhealthy"][["calories","sugar","fat","fiber"]].agg(['min','max','mean']))
