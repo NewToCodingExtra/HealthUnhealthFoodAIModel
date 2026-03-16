@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+import joblib
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -122,9 +124,11 @@ X_all = df[core_features + optional_features] #no need to use df.drop() since we
 #target variable (unhealthy = 0 and healthy = 1)
 y = df['health_label']
 
-scaler = StandardScaler()
-X_core_scaled = scaler.fit_transform(X_core) # scale the core features
-X_all_scaled = scaler.fit_transform(X_all) # scale all features (core + optional)
+scaler_core = StandardScaler()
+scaler_all = StandardScaler()
+
+X_core_scaled = scaler_core.fit_transform(X_core) # scale the core features
+X_all_scaled = scaler_all.fit_transform(X_all) # scale all features (core + optional)
 
 #training model using only the core features first
 
@@ -185,3 +189,13 @@ importance_all = pd.DataFrame(
 
 print("Feature importance by class using model_all:\n", importance_all)
 
+trained_models = {
+    'core': model_core,
+    'all': model_all
+}
+trained_scalers = {
+    'core': scaler_core,   # X_core scaler
+    'all': scaler_all     # X_all scaler, or a separate one if you used separate scalers
+}
+
+joblib.dump({'models': trained_models, 'scalers': trained_scalers}, 'trained_model.pkl')
