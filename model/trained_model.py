@@ -86,11 +86,13 @@ health_score = (
 health_score = health_score + np.random.normal(0, 5, size=n) # adding random noise with a mean of 0 and a standard deviation of 5 to the health score
                 
 # generating health label based on health score
-health_label = pd.qcut(
-    health_score,
-    q=2,
-    labels=['Unhealthy', 'Healthy']
-)
+# health_label = pd.qcut(
+#     health_score,
+#     q=[0, 0.4, 1.0],
+#     labels=['Unhealthy', 'Healthy']
+# )
+
+health_label = pd.Series(np.where(health_score > 5, 'Healthy', 'Unhealthy'))
 
 # creating dataframe with all the nutrition facts
 df = pd.DataFrame({
