@@ -50,21 +50,22 @@ unhealthy_added_sugar = np.random.randint(5, 30, size=n//2) #high means unhealth
 unhealthy_trans_fat = np.random.randint(0, 5, size=n//2) #high means unhealthy
 
 
-#meging healthy and unhealthy ranges
-calories = np.concatenate([healthy_calories, unhealthy_calories])
-sugar = np.concatenate([healthy_sugar, unhealthy_sugar])
-fat = np.concatenate([healthy_fat, unhealthy_fat])
-fiber = np.concatenate([healthy_fiber, unhealthy_fiber])
-protein = np.concatenate([healthy_protein, unhealthy_protein])
-sodium = np.concatenate([healthy_sodium, unhealthy_sodium])
-cholesterol = np.concatenate([healthy_cholesterol, unhealthy_cholesterol])
-saturated_fat = np.concatenate([healthy_saturated_fat, unhealthy_saturated_fat])
+# combining healthy and unhealthy ranges
+calories = np.concatenate([healthy_calories, unhealthy_calories]) # combining healthy and unhealthy calories
+sugar = np.concatenate([healthy_sugar, unhealthy_sugar]) # combining healthy and unhealthy sugar
+fat = np.concatenate([healthy_fat, unhealthy_fat]) # combining healthy and unhealthy fat
+fiber = np.concatenate([healthy_fiber, unhealthy_fiber]) # combining healthy and unhealthy fiber
+protein = np.concatenate([healthy_protein, unhealthy_protein]) # combining healthy and unhealthy protein
+sodium = np.concatenate([healthy_sodium, unhealthy_sodium]) # combining healthy and unhealthy sodium
+cholesterol = np.concatenate([healthy_cholesterol, unhealthy_cholesterol]) # combining healthy and unhealthy cholesterol
+saturated_fat = np.concatenate([healthy_saturated_fat, unhealthy_saturated_fat]) # combining healthy and unhealthy saturated fat
 
-vitamin_c = np.concatenate([healthy_vitamin_c, unhealthy_vitamin_c])
-calcium = np.concatenate([healthy_calcium, unhealthy_calcium])
-added_sugar = np.concatenate([healthy_added_sugar, unhealthy_added_sugar])
-trans_fat = np.concatenate([healthy_trans_fat, unhealthy_trans_fat])
+vitamin_c = np.concatenate([healthy_vitamin_c, unhealthy_vitamin_c]) # combining healthy and unhealthy vitamin c
+calcium = np.concatenate([healthy_calcium, unhealthy_calcium]) # combining healthy and unhealthy calcium
+added_sugar = np.concatenate([healthy_added_sugar, unhealthy_added_sugar]) # combining healthy and unhealthy added sugar
+trans_fat = np.concatenate([healthy_trans_fat, unhealthy_trans_fat]) # combining healthy and unhealthy trans fat
 
+# calculating health score based on given nutrition facts
 health_score = (
     fiber * 0.25 + 
     protein * 0.2 + 
@@ -80,12 +81,14 @@ health_score = (
     trans_fat * 0.05
 )
 
+# generating health label based on health score
 health_label = pd.qcut(
     health_score,
     q=2,
     labels=['Unhealthy', 'Healthy']
 )
 
+# creating dataframe with all the nutrition facts
 df = pd.DataFrame({
     "calories": calories,
     "sugar": sugar,
@@ -102,8 +105,13 @@ df = pd.DataFrame({
     "health_label" : health_label
 })
 
-# Summary stats for unhealthy foods
-print(df[df["health_label"] == "Unhealthy"].describe())
 
-# Check min/max of key features
-print(df[df["health_label"] == "Unhealthy"][["calories","sugar","fat","fiber"]].agg(['min','max','mean']))
+encoder = LabelEncoder()
+#convert label into numeric values (unhealthy = 0 and healthy = 1)
+df['health_label'] = encoder.fit_transform(df['health_label'])
+
+X = df.drop('health_label', axis=1) # only the features without labels
+y = df['health_label'] # only the labels
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X) # scale the features
