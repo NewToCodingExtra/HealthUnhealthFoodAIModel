@@ -19,7 +19,7 @@ np.random.seed(42)
 n = 10_000
 
 #declares core or optional features (can add more optional features later, remove this after final edit (the comment only) dev:Joshua)
-core_features = ["calories", "sugar", "fat", "fiber", "protein", "sodium", "cholesterol", "saturated_fat"]
+core_features = ["calories", "sugar", "fat", "fiber", "protein", "sodium", "cholesterol", "saturated_fat", "carbohydrates"]
 optional_features = ["vitamin_c", "calcium", "added_sugar", "trans_fat", "potassium", "magnesium", "iron", "omega3"]
 
 healthy_calories      = np.random.uniform(20,  350,  n//2)  # kcal
@@ -30,7 +30,8 @@ healthy_protein       = np.random.uniform(2,   35,   n//2)  # g   – tends high
 healthy_sodium        = np.random.uniform(0,   400,  n//2)  # mg  – tends low
 healthy_cholesterol   = np.random.uniform(0,   100,  n//2)  # mg
 healthy_saturated_fat = np.random.uniform(0,   5,    n//2)  # g   – tends low
- 
+healthy_carbohydrates = np.random.uniform(0,   50,   n//2)  # g   – tends moderate 
+
 healthy_vitamin_c     = np.random.uniform(3,   90,   n//2)  # mg  – tends high
 healthy_calcium       = np.random.uniform(10,  500,  n//2)  # mg
 healthy_added_sugar   = np.random.uniform(0,   8,    n//2)  # g   – tends low
@@ -48,6 +49,7 @@ unhealthy_protein       = np.random.uniform(0,    20,   n//2)  # g    – tends 
 unhealthy_sodium        = np.random.uniform(200,  2000, n//2)  # mg   – tends high
 unhealthy_cholesterol   = np.random.uniform(20,   300,  n//2)  # mg   – tends high
 unhealthy_saturated_fat = np.random.uniform(4,    30,   n//2)  # g    – tends high
+unhealthy_carbohydrates = np.random.uniform(5,   120,  n//2)  # g    – tends high
  
 unhealthy_vitamin_c     = np.random.uniform(0,    15,   n//2)  # mg   – tends low
 unhealthy_calcium       = np.random.uniform(0,    150,  n//2)  # mg
@@ -67,6 +69,7 @@ protein       = np.concatenate([healthy_protein, unhealthy_protein]) # combining
 sodium        = np.concatenate([healthy_sodium, unhealthy_sodium]) # combining healthy and unhealthy sodium
 cholesterol   = np.concatenate([healthy_cholesterol, unhealthy_cholesterol]) # combining healthy and unhealthy cholesterol
 saturated_fat = np.concatenate([healthy_saturated_fat, unhealthy_saturated_fat]) # combining healthy and unhealthy saturated fat
+carbohydrates = np.concatenate([healthy_carbohydrates, unhealthy_carbohydrates]) # combining healthy and unhealthy carbohydrates
 
 vitamin_c   = np.concatenate([healthy_vitamin_c, unhealthy_vitamin_c]) # combining healthy and unhealthy vitamin c
 calcium     = np.concatenate([healthy_calcium, unhealthy_calcium]) # combining healthy and unhealthy calcium
@@ -88,6 +91,7 @@ health_score = (
     + iron * 1.5  # high iron content is important for blood health, but it is not as important as other nutrition facts, so it gets a lower weight
     + omega3 * 6.0  # high omega-3 content is important for heart and brain health, but it is not as important as other nutrition facts, so it gets a lower weight
     - calories * 0.05  # high calorie content is unhealthy, so it gets a negative weight
+    - carbohydrates * 0.15  # high carbohydrate content can be unhealthy, especially if it is refined carbohydrates, so it gets a negative weight
     - sugar * 2.5  # high sugar content is unhealthy, so it gets a negative weight
     - fat * 0.8  # high fat content is unhealthy, so it gets a negative weight
     - sodium * 0.015  # high sodium content is unhealthy, but it is not as important as other nutrition facts, so it gets a lower weight
@@ -119,6 +123,7 @@ df = pd.DataFrame({
     "sodium": sodium,
     "cholesterol": cholesterol,
     "saturated_fat": saturated_fat,
+    "carbohydrates": carbohydrates,
     "vitamin_c": vitamin_c,
     "calcium": calcium,
     "added_sugar": added_sugar,
