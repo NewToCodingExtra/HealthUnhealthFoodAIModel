@@ -21,13 +21,12 @@ core_features = [
     "sodium", "cholesterol", "saturated_fat", "carbohydrates"
 ]
 optional_features = [
-    "vitamin_c", "calcium", "potassium", "magnesium",
-    "iron", "omega3", "monounsaturated_fat", "zinc",
-    "phosphorus", "vitamin_a", "vitamin_b6", "vitamin_b12",
-    "vitamin_e", "vitamin_k", "choline", "niacin", "added_sugar",
+    "added_sugar",  # strongest unhealthy signal (691x ratio)
+    "vitamin_c",    # strong healthy signal (6.7x ratio)
+    "omega3",       # healthy fat signal — distinguishes salmon/nuts from junk
 ]
 
-df = pd.read_csv('nutrition_data_30k.csv')
+df = pd.read_csv('nutrition_data_50.5k.csv')
  
 print(f"Dataset loaded: {len(df)} rows")
  
