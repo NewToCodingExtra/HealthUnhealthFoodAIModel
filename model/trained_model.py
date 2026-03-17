@@ -27,7 +27,7 @@ optional_features = [
     "vitamin_e", "vitamin_k", "choline", "niacin", "added_sugar",
 ]
 
-df = pd.read_csv('nutrition_data_25k.csv')
+df = pd.read_csv('nutrition_data_30k.csv')
  
 print(f"Dataset loaded: {len(df)} rows")
  
@@ -67,12 +67,12 @@ X_all_scaled = scaler_all.fit_transform(X_all_imputed) # scale all features (cor
 
 #splitting the data into training and testing sets (80% training and 20% testing) (only core features   and target variable)
 X_train_core, X_test_core, y_train_core, y_test_core = train_test_split(
-    X_core_scaled, y, test_size=0.2, random_state=42
+    X_core_scaled, y, test_size=0.2, random_state=42, stratify=y
 )
 
 # this line creates a logistic regression model with a maximum of 1000 iterations, this is how we train our model to make predictions based on the data we give it.
 # this model is strong if optional features are not filled, but it is weak if optional features are filled, since it relies on core features to make predictions, so if optional features are filled, it will not perform well.                     
-model_core = LogisticRegression(max_iter=1000, class_weight='balanced')
+model_core = LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0) # C is the inverse of regularization strength, smaller values specify stronger regularization, which can help prevent overfitting when using only core features, especially if some core features are noisy or less relevant. Adjusting C allows us to find a good balance between fitting the training data and generalizing to unseen data.
 
 #training the model using only 8000(80% of samples) train data (core features only)
 model_core.fit(X_train_core, y_train_core)
@@ -96,12 +96,12 @@ print("Feature importance by class using model_core:\n", importance)
 #Training model using all features (core + optional)
 #splitting the data into training and testing sets (80% training and 20% testing) (using all features  and target variable)
 X_train_all, X_test_all, y_train_all, y_test_all = train_test_split(
-    X_all_scaled, y, test_size=0.2, random_state=42
+    X_all_scaled, y, test_size=0.2, random_state=42, stratify=y
 )
 
 # this line creates a logistic regression model with a maximum of 1000 iterations, this is how we train our model to make predictions based on the data we give it.
 # this model is strong if optional features are filled, but it is weak if optional features are not filled, since it relies on all features to make predictions, so if optional features are not filled, it will not perform well.
-model_all = LogisticRegression(max_iter=1000, class_weight='balanced')
+model_all = LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0) # C is the inverse of regularization strength, smaller values specify stronger regularization, which can help prevent overfitting when using all features, especially if some optional features are noisy or less relevant. Adjusting C allows us to find a good balance between fitting the training data and generalizing to unseen data.
 
 #training the model using all features (core + optional)
 model_all.fit(X_train_all, y_train_all)

@@ -63,7 +63,7 @@ test_foods = [
      "vitamin_c": 50, "calcium": 20,  "potassium": 200, "magnesium": 11,
      "iron": 0.2,     "omega3": 0.01, "monounsaturated_fat": 0.02, "zinc": 0.05,
      "phosphorus": 17,"vitamin_a": 10, "vitamin_b6": 0.04, "vitamin_b12": 0,
-     "vitamin_e": 0.1,"vitamin_k": 0.1,"choline": 8.4,    "niacin": 0.4,   "added_sugar": 0},
+     "vitamin_e": 0.1,"vitamin_k": 0.1,"choline": 8.4,    "niacin": 0.4,  "added_sugar": 0},
 
     {"name": "Oatmeal",
      "calories": 68,  "sugar": 1,   "fat": 1.4,  "fiber": 1.7,  "protein": 2.4,
@@ -79,7 +79,7 @@ test_foods = [
      "vitamin_c": 0,  "calcium": 12,  "potassium": 490, "magnesium": 29,
      "iron": 0.3,     "omega3": 2.2,  "monounsaturated_fat": 3.0,  "zinc": 0.4,
      "phosphorus": 371,"vitamin_a": 12, "vitamin_b6": 0.9,  "vitamin_b12": 3.2,
-     "vitamin_e": 1.1,"vitamin_k": 0.5,"choline": 96.0,   "niacin": 8.6,   "added_sugar": 0},
+     "vitamin_e": 1.1,"vitamin_k": 0.5,"choline": 96.0,   "niacin": 8.6,  "added_sugar": 0},
 
     {"name": "Lentils",
      "calories": 116, "sugar": 1.8, "fat": 0.4,  "fiber": 7.9,  "protein": 9.0,
@@ -113,7 +113,7 @@ test_foods = [
      "vitamin_c": 0,  "calcium": 0,   "potassium": 2,   "magnesium": 0,
      "iron": 0,       "omega3": 0,    "monounsaturated_fat": 0,    "zinc": 0,
      "phosphorus": 0, "vitamin_a": 0,  "vitamin_b6": 0,    "vitamin_b12": 0,
-     "vitamin_e": 0,  "vitamin_k": 0,  "choline": 0,      "niacin": 0,     "added_sugar": 10},
+     "vitamin_e": 0,  "vitamin_k": 0,  "choline": 0,      "niacin": 0,  "added_sugar": 10},
 
     {"name": "Chocolate Bar",
      "calories": 230, "sugar": 25,  "fat": 13,   "fiber": 2,    "protein": 3,
@@ -121,7 +121,7 @@ test_foods = [
      "vitamin_c": 0,  "calcium": 50,  "potassium": 200, "magnesium": 40,
      "iron": 2.0,     "omega3": 0.05, "monounsaturated_fat": 4.5,  "zinc": 0.9,
      "phosphorus": 87,"vitamin_a": 0,  "vitamin_b6": 0.05, "vitamin_b12": 0.2,
-     "vitamin_e": 0.5,"vitamin_k": 4.8,"choline": 20.0,   "niacin": 0.4,   "added_sugar": 22},
+     "vitamin_e": 0.5,"vitamin_k": 4.8,"choline": 20.0,   "niacin": 0.4,  "added_sugar": 22},
 
     {"name": "Fried Chicken",
      "calories": 246, "sugar": 0,   "fat": 15,   "fiber": 0,    "protein": 20,
@@ -129,7 +129,7 @@ test_foods = [
      "vitamin_c": 0,  "calcium": 11,  "potassium": 220, "magnesium": 20,
      "iron": 1.0,     "omega3": 0.1,  "monounsaturated_fat": 6.0,  "zinc": 1.5,
      "phosphorus": 156,"vitamin_a": 21, "vitamin_b6": 0.4,  "vitamin_b12": 0.3,
-     "vitamin_e": 0.5,"vitamin_k": 4.3,"choline": 60.0,   "niacin": 6.8,   "added_sugar": 0},
+     "vitamin_e": 0.5,"vitamin_k": 4.3,"choline": 60.0,   "niacin": 6.8,  "added_sugar": 0},
 
     {"name": "Cheddar Cheese",
      "calories": 402, "sugar": 0.5, "fat": 33,   "fiber": 0,    "protein": 25,
@@ -145,7 +145,7 @@ test_foods = [
      "vitamin_c": 7,  "calcium": 18,  "potassium": 535, "magnesium": 30,
      "iron": 1.0,     "omega3": 0.05, "monounsaturated_fat": 6.5,  "zinc": 0.4,
      "phosphorus": 85,"vitamin_a": 0,  "vitamin_b6": 0.3,  "vitamin_b12": 0,
-     "vitamin_e": 1.5,"vitamin_k": 8.4,"choline": 14.0,   "niacin": 2.3,   "added_sugar": 0},
+     "vitamin_e": 1.5,"vitamin_k": 8.4,"choline": 14.0,   "niacin": 2.3,  "added_sugar": 0},
 
     {"name": "Doughnut",
      "calories": 452, "sugar": 27,  "fat": 25,   "fiber": 1.5,  "protein": 5,
@@ -153,7 +153,7 @@ test_foods = [
      "vitamin_c": 0,  "calcium": 60,  "potassium": 90,  "magnesium": 15,
      "iron": 1.2,     "omega3": 0.1,  "monounsaturated_fat": 11.0, "zinc": 0.4,
      "phosphorus": 72,"vitamin_a": 0,  "vitamin_b6": 0.04, "vitamin_b12": 0.1,
-     "vitamin_e": 2.1,"vitamin_k": 6.4,"choline": 18.0,   "niacin": 1.9,   "added_sugar": 18},
+     "vitamin_e": 2.1,"vitamin_k": 6.4,"choline": 18.0,   "niacin": 1.9,  "added_sugar": 18},
 ]
 
 df_test = pd.DataFrame(test_foods)
