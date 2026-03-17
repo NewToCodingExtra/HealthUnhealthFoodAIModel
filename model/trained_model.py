@@ -15,126 +15,111 @@ from sklearn.impute import SimpleImputer
 
 np.random.seed(42)
 
-#number of samples
-n = 10_000
-
 #declares core or optional features (can add more optional features later, remove this after final edit (the comment only) dev:Joshua)
-core_features = ["calories", "sugar", "fat", "fiber", "protein", "sodium", "cholesterol", "saturated_fat", "carbohydrates"]
-optional_features = ["vitamin_c", "calcium", "added_sugar", "trans_fat", "potassium", "magnesium", "iron", "omega3"]
+core_features = [
+    "calories", "sugar", "fat", "fiber", "protein",
+    "sodium", "cholesterol", "saturated_fat", "carbohydrates"
+]
+optional_features = [
+    "vitamin_c", "calcium", "potassium", "magnesium",
+    "iron", "omega3", "monounsaturated_fat", "zinc",
+    "phosphorus", "vitamin_a", "vitamin_b6", "vitamin_b12",
+    "vitamin_e", "vitamin_k", "choline", "niacin",
+]
 
-healthy_calories      = np.random.uniform(20,  350,  n//2)  # kcal
-healthy_sugar         = np.random.uniform(0,   20,   n//2)  # g   – natural sugar OK
-healthy_fat           = np.random.uniform(0,   15,   n//2)  # g
-healthy_fiber         = np.random.uniform(1.5, 15,   n//2)  # g   – tends high
-healthy_protein       = np.random.uniform(2,   35,   n//2)  # g   – tends high
-healthy_sodium        = np.random.uniform(0,   400,  n//2)  # mg  – tends low
-healthy_cholesterol   = np.random.uniform(0,   100,  n//2)  # mg
-healthy_saturated_fat = np.random.uniform(0,   5,    n//2)  # g   – tends low
-healthy_carbohydrates = np.random.uniform(0,   50,   n//2)  # g   – tends moderate 
-
-healthy_vitamin_c     = np.random.uniform(3,   90,   n//2)  # mg  – tends high
-healthy_calcium       = np.random.uniform(10,  500,  n//2)  # mg
-healthy_added_sugar   = np.random.uniform(0,   8,    n//2)  # g   – tends low
-healthy_trans_fat     = np.random.uniform(0,   0.5,  n//2)  # g   – near zero
-healthy_potassium     = np.random.uniform(150, 600,  n//2)  # mg  – tends high
-healthy_magnesium     = np.random.uniform(20,  120,  n//2)  # mg  – tends high
-healthy_iron          = np.random.uniform(0.5, 5,    n//2)  # mg  – tends high
-healthy_omega3        = np.random.uniform(0.05,2.5,  n//2)  # g   – tends high
-
-unhealthy_calories      = np.random.uniform(100,  700,  n//2)  # kcal – tends high
-unhealthy_sugar         = np.random.uniform(8,    60,   n//2)  # g    – tends high
-unhealthy_fat           = np.random.uniform(8,    45,   n//2)  # g    – tends high
-unhealthy_fiber         = np.random.uniform(0,    4,    n//2)  # g    – tends low
-unhealthy_protein       = np.random.uniform(0,    20,   n//2)  # g    – tends low
-unhealthy_sodium        = np.random.uniform(200,  2000, n//2)  # mg   – tends high
-unhealthy_cholesterol   = np.random.uniform(20,   300,  n//2)  # mg   – tends high
-unhealthy_saturated_fat = np.random.uniform(4,    30,   n//2)  # g    – tends high
-unhealthy_carbohydrates = np.random.uniform(5,   120,  n//2)  # g    – tends high
+raw = pd.read_csv('food.csv')
  
-unhealthy_vitamin_c     = np.random.uniform(0,    15,   n//2)  # mg   – tends low
-unhealthy_calcium       = np.random.uniform(0,    150,  n//2)  # mg
-unhealthy_added_sugar   = np.random.uniform(6,    50,   n//2)  # g    – tends high
-unhealthy_trans_fat     = np.random.uniform(0.5,  5,    n//2)  # g    – elevated
-unhealthy_potassium     = np.random.uniform(0,    200,  n//2)  # mg   – tends low
-unhealthy_magnesium     = np.random.uniform(0,    30,   n//2)  # mg   – tends low
-unhealthy_iron          = np.random.uniform(0,    1.5,  n//2)  # mg   – tends low
-unhealthy_omega3        = np.random.uniform(0,    0.2,  n//2)  # g    – tends low
+column_map = {
+    'Data.Carbohydrate'             : 'carbohydrates',
+    'Data.Cholesterol'              : 'cholesterol',
+    'Data.Fiber'                    : 'fiber',
+    'Data.Protein'                  : 'protein',
+    'Data.Sugar Total'              : 'sugar',
+    'Data.Fat.Polysaturated Fat'    : 'omega3',
+    'Data.Fat.Saturated Fat'        : 'saturated_fat',
+    'Data.Fat.Total Lipid'          : 'fat',
+    'Data.Fat.Monosaturated Fat'    : 'monounsaturated_fat',
+    'Data.Major Minerals.Calcium'   : 'calcium',
+    'Data.Major Minerals.Iron'      : 'iron',
+    'Data.Major Minerals.Magnesium' : 'magnesium',
+    'Data.Major Minerals.Potassium' : 'potassium',
+    'Data.Major Minerals.Sodium'    : 'sodium',
+    'Data.Major Minerals.Zinc'      : 'zinc',
+    'Data.Major Minerals.Phosphorus': 'phosphorus',
+    'Data.Vitamins.Vitamin C'       : 'vitamin_c',
+    'Data.Vitamins.Vitamin A - RAE' : 'vitamin_a',
+    'Data.Vitamins.Vitamin B6'      : 'vitamin_b6',
+    'Data.Vitamins.Vitamin B12'     : 'vitamin_b12',
+    'Data.Vitamins.Vitamin E'       : 'vitamin_e',
+    'Data.Vitamins.Vitamin K'       : 'vitamin_k',
+    'Data.Choline'                  : 'choline',
+    'Data.Niacin'                   : 'niacin',
+}
+ 
+df = raw[list(column_map.keys())].copy()
+df.rename(columns=column_map, inplace=True)
+ 
+# Calories computed via Atwater formula (not in dataset directly)
+df['calories'] = (
+    raw['Data.Protein']         * 4 +
+    raw['Data.Carbohydrate']    * 4 +
+    raw['Data.Fat.Total Lipid'] * 9
+)
 
-# combining healthy and unhealthy ranges
-calories      = np.concatenate([healthy_calories, unhealthy_calories]) # combining healthy and unhealthy calories
-sugar         = np.concatenate([healthy_sugar, unhealthy_sugar]) # combining healthy and unhealthy sugar
-fat           = np.concatenate([healthy_fat, unhealthy_fat]) # combining healthy and unhealthy fat
-fiber         = np.concatenate([healthy_fiber, unhealthy_fiber]) # combining healthy and unhealthy fiber
-protein       = np.concatenate([healthy_protein, unhealthy_protein]) # combining healthy and unhealthy protein
-sodium        = np.concatenate([healthy_sodium, unhealthy_sodium]) # combining healthy and unhealthy sodium
-cholesterol   = np.concatenate([healthy_cholesterol, unhealthy_cholesterol]) # combining healthy and unhealthy cholesterol
-saturated_fat = np.concatenate([healthy_saturated_fat, unhealthy_saturated_fat]) # combining healthy and unhealthy saturated fat
-carbohydrates = np.concatenate([healthy_carbohydrates, unhealthy_carbohydrates]) # combining healthy and unhealthy carbohydrates
+print(f"Real foods loaded  : {len(df)}")
 
-vitamin_c   = np.concatenate([healthy_vitamin_c, unhealthy_vitamin_c]) # combining healthy and unhealthy vitamin c
-calcium     = np.concatenate([healthy_calcium, unhealthy_calcium]) # combining healthy and unhealthy calcium
-added_sugar = np.concatenate([healthy_added_sugar, unhealthy_added_sugar]) # combining healthy and unhealthy added sugar
-trans_fat   = np.concatenate([healthy_trans_fat, unhealthy_trans_fat]) # combining healthy and unhealthy trans fat
-potassium   = np.concatenate([healthy_potassium,   unhealthy_potassium])
-magnesium   = np.concatenate([healthy_magnesium,   unhealthy_magnesium])
-iron        = np.concatenate([healthy_iron,        unhealthy_iron])
-omega3      = np.concatenate([healthy_omega3,      unhealthy_omega3])
+n_augment   = 10000 - len(df)
+augment_idx = np.random.choice(len(df), size=n_augment, replace=True)
+augmented   = df.iloc[augment_idx].copy().reset_index(drop=True)
+ 
+for col in df.columns:
+    noise_scale = df[col].std() * 0.02   # 2% of std = realistic measurement variation
+    augmented[col] = (
+        augmented[col] + np.random.normal(0, noise_scale, n_augment)
+    ).clip(lower=0)   # nutrition values can't be negative
+ 
+df = pd.concat([df, augmented], ignore_index=True)
+print(f"After augmentation : {len(df)} (added {n_augment} rows with 2% noise)")
 
-# calculating health score based on given nutrition facts
 health_score = (
-      fiber * 4.0  # high fiber content is important for a healthy diet, so it gets a higher weight
-    + protein * 1.5 # high protein content is important for muscle growth and repair, so it gets a higher weight
-    + vitamin_c * 0.4  # high vitamin c content is important for immune function, so it gets a moderate weight
-    + calcium * 0.04  # high calcium content is important for bone health, but it is not as important as other nutrition facts, so it gets a lower weight
-    + potassium * 0.012  # high potassium content is important for heart health, but it is not as important as other nutrition facts, so it gets a lower weight
-    + magnesium * 0.15 # high magnesium content is important for muscle and nerve
-    + iron * 1.5  # high iron content is important for blood health, but it is not as important as other nutrition facts, so it gets a lower weight
-    + omega3 * 6.0  # high omega-3 content is important for heart and brain health, but it is not as important as other nutrition facts, so it gets a lower weight
-    - calories * 0.05  # high calorie content is unhealthy, so it gets a negative weight
-    - carbohydrates * 0.15  # high carbohydrate content can be unhealthy, especially if it is refined carbohydrates, so it gets a negative weight
-    - sugar * 2.5  # high sugar content is unhealthy, so it gets a negative weight
-    - fat * 0.8  # high fat content is unhealthy, so it gets a negative weight
-    - sodium * 0.015  # high sodium content is unhealthy, but it is not as important as other nutrition facts, so it gets a lower weight
-    - cholesterol * 0.04  # high cholesterol content is unhealthy, but it is not as important as other nutrition facts, so it gets a lower weight
-    - saturated_fat * 4.0  # high saturated fat content is unhealthy, but it is not as important as other nutrition facts, so it gets a lower weight
-    - added_sugar * 5.0  # high added sugar content is unhealthy, but it is not as important as other nutrition facts, so it gets a lower weight
-    - trans_fat * 20.0 # high trans fat content is unhealthy, but it is not as important as other nutrition facts, so it gets a lower weight
-) # dev: Joshua : fix the comment later as it is ai generated!
+    # POSITIVE
+      df['fiber']               * 4.0    # strongest healthy signal
+    + df['protein']             * 1.5    # essential macronutrient
+    + df['vitamin_c']           * 0.4    # antioxidant, immune support
+    + df['calcium']             * 0.04   # bone health
+    + df['potassium']           * 0.012  # heart health, blood pressure
+    + df['magnesium']           * 0.15   # metabolic health
+    + df['iron']                * 1.5    # oxygen transport
+    + df['omega3']              * 6.0    # anti-inflammatory, cardiovascular
+    + df['monounsaturated_fat'] * 1.0    # good fat — olive oil, avocado, nuts
+    + df['zinc']                * 1.2    # immune function, wound healing
+    + df['vitamin_a']           * 0.005  # vision, immune — smaller weight due to large values
+    + df['vitamin_e']           * 0.3    # antioxidant, skin health
+    + df['vitamin_k']           * 0.01   # blood clotting, bone health
+    + df['choline']             * 0.05   # brain health, liver function
+    + df['niacin']              * 0.3    # energy metabolism
+    + df['vitamin_b6']          * 2.0    # brain health, metabolism
+    + df['vitamin_b12']         * 2.0    # nerve function, red blood cells
+    + df['phosphorus']          * 0.01   # bone health, energy
+    # NEGATIVE
+    - df['calories']            * 0.04   # excess energy → weight gain
+    - df['carbohydrates']       * 0.15   # refined carbs spike blood sugar
+    - df['sugar']               * 2.0    # free sugars
+    - df['fat']                 * 0.5    # excess total fat
+    - df['sodium']              * 0.015  # raises blood pressure
+    - df['cholesterol']         * 0.03   # dietary cholesterol
+    - df['saturated_fat']       * 3.5    # raises LDL cholesterol
+)
 
 #adding noise to the health score to make it more realistic and less deterministic, since in real life, the healthiness of a food item is not solely determined by its nutrition facts, but also by other factors such as portion size, cooking method, and individual dietary needs. The noise is added to simulate these real-life factors and make the model more robust and generalizable.
-health_score = health_score + np.random.normal(0, 10, size=n) # adding random noise with a mean of 0 and a standard deviation of 5 to the health score
-                
-# generating health label based on health score
-# health_label = pd.qcut(
-#     health_score,
-#     q=[0, 0.4, 1.0],
-#     labels=['Unhealthy', 'Healthy']
-# )
-
-health_label = pd.Series(np.where(health_score > -30, 'Healthy', 'Unhealthy'))
-
-# creating dataframe with all the nutrition facts
-df = pd.DataFrame({
-    "calories": calories,
-    "sugar": sugar,
-    "fat": fat,
-    "fiber": fiber,
-    "protein": protein,
-    "sodium": sodium,
-    "cholesterol": cholesterol,
-    "saturated_fat": saturated_fat,
-    "carbohydrates": carbohydrates,
-    "vitamin_c": vitamin_c,
-    "calcium": calcium,
-    "added_sugar": added_sugar,
-    "trans_fat": trans_fat,
-    "potassium": potassium,
-    "magnesium": magnesium,
-    "iron": iron,
-    "omega3": omega3,
-    "health_label" : health_label
-})
-
+THRESHOLD = 5
+df['health_label'] = np.where(health_score >= THRESHOLD, 'Healthy', 'Unhealthy')
+# 1 = Healthy, 0 = Unhealthy  (matches prediction display in test files)
+ 
+n_healthy   = (df['health_label'] == 'Healthy').sum()
+n_unhealthy = (df['health_label'] == 'Unhealthy').sum()
+print(f"Labels: Healthy={n_healthy} ({100*n_healthy/len(df):.1f}%)  "
+      f"Unhealthy={n_unhealthy} ({100*n_unhealthy/len(df):.1f}%)")
 
 encoder = LabelEncoder()
 #convert label into numeric values (unhealthy = 0 and healthy = 1)
