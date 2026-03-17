@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.impute import SimpleImputer
 
 # python -m pip install --upgrade pandas numpy matplotlib scikit-learn 
 # run this on terminal
@@ -133,8 +134,11 @@ y = df['health_label']
 scaler_core = StandardScaler()
 scaler_all = StandardScaler()
 
+imputer = SimpleImputer(strategy='mean') # using mean imputation to handle any potential missing values in the dataset, since mean is less sensitive to outliers compared to mean imputation, making it a more robust choice for our dataset which may contain extreme values in nutrition facts.
+
 X_core_scaled = scaler_core.fit_transform(X_core) # scale the core features
-X_all_scaled = scaler_all.fit_transform(X_all) # scale all features (core + optional)
+X_all_imputed = imputer.fit_transform(X_all) # impute missing values in all features (core + optional)
+X_all_scaled = scaler_all.fit_transform(X_all_imputed) # scale all features (core + optional)
 
 #training model using only the core features first
 
@@ -204,4 +208,4 @@ trained_scalers = {
     'all': scaler_all     # X_all scaler, or a separate one if you used separate scalers
 }
 
-joblib.dump({'models': trained_models, 'scalers': trained_scalers}, 'trained_model.pkl')
+joblib.dump({'models': trained_models, 'scalers': trained_scalers, 'imputer': imputer}, 'trained_model.pkl')

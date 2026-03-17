@@ -3,10 +3,11 @@
 import joblib
 import pandas as pd
 
-# Load trained models and scalers
+# Load trained models, scalers, and imputer
 data = joblib.load('trained_model.pkl')
 models = data['models']
 scalers = data['scalers']
+imputer = data['imputer']
 
 core_features = ["calories", "sugar", "fat", "fiber", "protein", "sodium", "cholesterol", "saturated_fat"]
 optional_features = ["vitamin_c", "calcium", "added_sugar", "trans_fat"]
@@ -71,14 +72,17 @@ X_all = df_test[core_features + optional_features]
 
 # Scale
 X_core_scaled = scalers['core'].transform(X_core)
-X_all_scaled = scalers['all'].transform(X_all)
+X_all_imputed = imputer.transform(X_all)        # fill unknowns with training mean
+X_all_scaled  = scalers['all'].transform(X_all_imputed)
 
 # Make predictions
 pred_core = models['core'].predict(X_core_scaled)
 pred_all = models['all'].predict(X_all_scaled)
 
-# Display results
+prob_core = models['core'].predict_proba(X_core_scaled)[:, 1]
+prob_all  = models['all'].predict_proba(X_all_scaled)[:, 1]
+
 for i, row in df_test.iterrows():
     print(f"\nFood Item: {row['name']}")
-    print(f"[Core Model] Prediction: {'Healthy' if pred_core[i] else 'Unhealthy'}")
-    print(f"[All Features Model] Prediction: {'Healthy' if pred_all[i] else 'Unhealthy'}")
+    print(f"[Core Model]         {'Healthy' if pred_core[i] else 'Unhealthy'} ({prob_core[i]*100:.1f}% confident)")
+    print(f"[All Features Model] {'Healthy' if pred_all[i]  else 'Unhealthy'} ({prob_all[i]*100:.1f}% confident)")
