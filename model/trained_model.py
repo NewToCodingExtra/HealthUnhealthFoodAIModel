@@ -24,107 +24,22 @@ optional_features = [
     "vitamin_c", "calcium", "potassium", "magnesium",
     "iron", "omega3", "monounsaturated_fat", "zinc",
     "phosphorus", "vitamin_a", "vitamin_b6", "vitamin_b12",
-    "vitamin_e", "vitamin_k", "choline", "niacin",
+    "vitamin_e", "vitamin_k", "choline", "niacin", "added_sugar",
 ]
 
-raw = pd.read_csv('food.csv')
+df = pd.read_csv('nutrition_data_10k.csv')
  
-column_map = {
-    'Data.Carbohydrate'             : 'carbohydrates',
-    'Data.Cholesterol'              : 'cholesterol',
-    'Data.Fiber'                    : 'fiber',
-    'Data.Protein'                  : 'protein',
-    'Data.Sugar Total'              : 'sugar',
-    'Data.Fat.Polysaturated Fat'    : 'omega3',
-    'Data.Fat.Saturated Fat'        : 'saturated_fat',
-    'Data.Fat.Total Lipid'          : 'fat',
-    'Data.Fat.Monosaturated Fat'    : 'monounsaturated_fat',
-    'Data.Major Minerals.Calcium'   : 'calcium',
-    'Data.Major Minerals.Iron'      : 'iron',
-    'Data.Major Minerals.Magnesium' : 'magnesium',
-    'Data.Major Minerals.Potassium' : 'potassium',
-    'Data.Major Minerals.Sodium'    : 'sodium',
-    'Data.Major Minerals.Zinc'      : 'zinc',
-    'Data.Major Minerals.Phosphorus': 'phosphorus',
-    'Data.Vitamins.Vitamin C'       : 'vitamin_c',
-    'Data.Vitamins.Vitamin A - RAE' : 'vitamin_a',
-    'Data.Vitamins.Vitamin B6'      : 'vitamin_b6',
-    'Data.Vitamins.Vitamin B12'     : 'vitamin_b12',
-    'Data.Vitamins.Vitamin E'       : 'vitamin_e',
-    'Data.Vitamins.Vitamin K'       : 'vitamin_k',
-    'Data.Choline'                  : 'choline',
-    'Data.Niacin'                   : 'niacin',
-}
- 
-df = raw[list(column_map.keys())].copy()
-df.rename(columns=column_map, inplace=True)
- 
-# Calories computed via Atwater formula (not in dataset directly)
-df['calories'] = (
-    raw['Data.Protein']         * 4 +
-    raw['Data.Carbohydrate']    * 4 +
-    raw['Data.Fat.Total Lipid'] * 9
-)
-
-print(f"Real foods loaded  : {len(df)}")
-
-n_augment   = 10000 - len(df)
-augment_idx = np.random.choice(len(df), size=n_augment, replace=True)
-augmented   = df.iloc[augment_idx].copy().reset_index(drop=True)
- 
-for col in df.columns:
-    noise_scale = df[col].std() * 0.02   # 2% of std = realistic measurement variation
-    augmented[col] = (
-        augmented[col] + np.random.normal(0, noise_scale, n_augment)
-    ).clip(lower=0)   # nutrition values can't be negative
- 
-df = pd.concat([df, augmented], ignore_index=True)
-print(f"After augmentation : {len(df)} (added {n_augment} rows with 2% noise)")
-
-health_score = (
-    # POSITIVE
-      df['fiber']               * 4.0    # strongest healthy signal
-    + df['protein']             * 1.5    # essential macronutrient
-    + df['vitamin_c']           * 0.4    # antioxidant, immune support
-    + df['calcium']             * 0.04   # bone health
-    + df['potassium']           * 0.012  # heart health, blood pressure
-    + df['magnesium']           * 0.15   # metabolic health
-    + df['iron']                * 1.5    # oxygen transport
-    + df['omega3']              * 6.0    # anti-inflammatory, cardiovascular
-    + df['monounsaturated_fat'] * 1.0    # good fat — olive oil, avocado, nuts
-    + df['zinc']                * 1.2    # immune function, wound healing
-    + df['vitamin_a']           * 0.005  # vision, immune — smaller weight due to large values
-    + df['vitamin_e']           * 0.3    # antioxidant, skin health
-    + df['vitamin_k']           * 0.01   # blood clotting, bone health
-    + df['choline']             * 0.05   # brain health, liver function
-    + df['niacin']              * 0.3    # energy metabolism
-    + df['vitamin_b6']          * 2.0    # brain health, metabolism
-    + df['vitamin_b12']         * 2.0    # nerve function, red blood cells
-    + df['phosphorus']          * 0.01   # bone health, energy
-    # NEGATIVE
-    - df['calories']            * 0.04   # excess energy → weight gain
-    - df['carbohydrates']       * 0.15   # refined carbs spike blood sugar
-    - df['sugar']               * 2.0    # free sugars
-    - df['fat']                 * 0.5    # excess total fat
-    - df['sodium']              * 0.015  # raises blood pressure
-    - df['cholesterol']         * 0.03   # dietary cholesterol
-    - df['saturated_fat']       * 3.5    # raises LDL cholesterol
-)
-
-#adding noise to the health score to make it more realistic and less deterministic, since in real life, the healthiness of a food item is not solely determined by its nutrition facts, but also by other factors such as portion size, cooking method, and individual dietary needs. The noise is added to simulate these real-life factors and make the model more robust and generalizable.
-THRESHOLD = 15
-df['health_label'] = np.where(health_score >= THRESHOLD, 'Healthy', 'Unhealthy')
-# 1 = Healthy, 0 = Unhealthy  (matches prediction display in test files)
+print(f"Dataset loaded: {len(df)} rows")
  
 n_healthy   = (df['health_label'] == 'Healthy').sum()
 n_unhealthy = (df['health_label'] == 'Unhealthy').sum()
 print(f"Labels: Healthy={n_healthy} ({100*n_healthy/len(df):.1f}%)  "
       f"Unhealthy={n_unhealthy} ({100*n_unhealthy/len(df):.1f}%)")
-
+ 
 encoder = LabelEncoder()
 #convert label into numeric values (unhealthy = 0 and healthy = 1)
 df['health_label'] = encoder.fit_transform(df['health_label'])
-
+ 
 # LabelEncoder sorts alphabetically: Healthy=0, Unhealthy=1
 # Flip so Healthy=1 and Unhealthy=0 (matches prediction display in test files)
 df['health_label'] = 1 - df['health_label']

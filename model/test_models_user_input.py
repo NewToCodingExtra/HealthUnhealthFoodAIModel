@@ -10,8 +10,16 @@ models = data['models']
 scalers = data['scalers']
 imputer = data['imputer']
 
-core_features = ["calories", "sugar", "fat", "fiber", "protein", "sodium", "cholesterol", "saturated_fat"]
-optional_features = ["vitamin_c", "calcium", "added_sugar", "trans_fat"]
+core_features = [
+    "calories", "sugar", "fat", "fiber", "protein",
+    "sodium", "cholesterol", "saturated_fat", "carbohydrates"
+]
+optional_features = [
+    "vitamin_c", "calcium", "potassium", "magnesium",
+    "iron", "omega3", "monounsaturated_fat", "zinc",
+    "phosphorus", "vitamin_a", "vitamin_b6", "vitamin_b12",
+    "vitamin_e", "vitamin_k", "choline", "niacin", "added_sugar",
+]
 
 # Ask user for the food name
 food_name = input("Enter the food name: ")
