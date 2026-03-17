@@ -27,7 +27,7 @@ optional_features = [
     "vitamin_e", "vitamin_k", "choline", "niacin", "added_sugar",
 ]
 
-df = pd.read_csv('nutrition_data_10k.csv')
+df = pd.read_csv('nutrition_data_25k.csv')
  
 print(f"Dataset loaded: {len(df)} rows")
  
