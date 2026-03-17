@@ -32,13 +32,20 @@ for feature in core_features:
     user_input_core.append(value)
 
 # Collect optional features
-# Enter 0 if unknown — imputer will replace it with the training data mean
+# Enter the actual value if known, or press Enter to skip (truly unknown)
+# Enter 0 only if the food genuinely has zero of that nutrient
 user_input_all = user_input_core.copy()
-print("\nEnter optional nutrition facts (enter 0 if unknown):")
+print("\nEnter optional nutrition facts:")
+print("  - Enter the actual value if you know it")
+print("  - Enter 0 if the food genuinely has none (e.g. added_sugar in plain salmon)")
+print("  - Press Enter (blank) if you don't know — imputer will estimate from similar foods")
 for feature in optional_features:
-    value = float(input(f"{feature}: "))
-    # Treat 0 as unknown — imputer fills it with the training mean
-    user_input_all.append(np.nan if value == 0 else value)
+    raw = input(f"  {feature}: ").strip()
+    if raw == "":
+        # Truly unknown — let imputer estimate
+        user_input_all.append(np.nan)
+    else:
+        user_input_all.append(float(raw))
 
 # Convert to DataFrames for scaling
 X_core_df = pd.DataFrame([user_input_core], columns=core_features)

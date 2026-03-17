@@ -57,7 +57,7 @@ y = df['health_label']
 scaler_core = StandardScaler()
 scaler_all = StandardScaler()
 
-imputer = SimpleImputer(strategy='mean') # using mean imputation to handle any potential missing values in the dataset, since mean is less sensitive to outliers compared to mean imputation, making it a more robust choice for our dataset which may contain extreme values in nutrition facts.
+imputer = SimpleImputer(strategy='median') # using mean imputation to handle any potential missing values in the dataset, since mean is less sensitive to outliers compared to mean imputation, making it a more robust choice for our dataset which may contain extreme values in nutrition facts.
 
 X_core_scaled = scaler_core.fit_transform(X_core) # scale the core features
 X_all_imputed = imputer.fit_transform(X_all) # impute missing values in all features (core + optional)
