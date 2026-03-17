@@ -125,7 +125,7 @@ test_foods = [
 
     {"name": "Fried Chicken",
      "calories": 246, "sugar": 0,   "fat": 15,   "fiber": 0,    "protein": 20,
-     "sodium": 500,   "cholesterol": 80,  "saturated_fat": 4.0,  "carbohydrates": 8,
+     "sodium": 600,   "cholesterol": 80,  "saturated_fat": 4.0,  "carbohydrates": 18,
      "vitamin_c": 0,  "calcium": 11,  "potassium": 220, "magnesium": 20,
      "iron": 1.0,     "omega3": 0.1,  "monounsaturated_fat": 6.0,  "zinc": 1.5,
      "phosphorus": 156,"vitamin_a": 21, "vitamin_b6": 0.4,  "vitamin_b12": 0.3,

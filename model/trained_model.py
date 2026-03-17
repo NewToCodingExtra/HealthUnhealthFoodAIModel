@@ -112,7 +112,7 @@ health_score = (
 )
 
 #adding noise to the health score to make it more realistic and less deterministic, since in real life, the healthiness of a food item is not solely determined by its nutrition facts, but also by other factors such as portion size, cooking method, and individual dietary needs. The noise is added to simulate these real-life factors and make the model more robust and generalizable.
-THRESHOLD = -15
+THRESHOLD = 15
 df['health_label'] = np.where(health_score >= THRESHOLD, 'Healthy', 'Unhealthy')
 # 1 = Healthy, 0 = Unhealthy  (matches prediction display in test files)
  
