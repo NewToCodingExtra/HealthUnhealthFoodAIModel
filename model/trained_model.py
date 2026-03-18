@@ -26,7 +26,7 @@ optional_features = [
     "omega3",       # healthy fat signal — distinguishes salmon/nuts from junk
 ]
 
-df = pd.read_csv('nutrition_data_50.5k.csv')
+df = pd.read_csv('nutrition_data_75k_v2.csv')
  
 print(f"Dataset loaded: {len(df)} rows")
  

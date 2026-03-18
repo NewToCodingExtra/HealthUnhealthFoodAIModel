@@ -76,7 +76,7 @@ test_foods = [
     {"name": "Whole Milk",
      "calories": 60,  "sugar": 5,   "fat": 3.3,  "fiber": 0,    "protein": 3.2,
      "sodium": 43,    "cholesterol": 10,  "saturated_fat": 1.9,  "carbohydrates": 5,
-     "added_sugar": 5,    "vitamin_c": 0,    "omega3": 0.08},
+     "added_sugar": 0,    "vitamin_c": 0,    "omega3": 0.08},
 
     {"name": "Whole Egg",
      "calories": 155, "sugar": 1.1, "fat": 11,   "fiber": 0,    "protein": 13,
