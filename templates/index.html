@@ -522,6 +522,26 @@
     display: flex; align-items: center; justify-content: center; }
   .modal-close:hover { border-color: var(--red); color: var(--red); }
 
+
+  /* ── Export buttons ── */
+  .export-bar {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .btn-export {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; border: 1px solid var(--border2);
+    color: var(--muted); font-family: var(--mono); font-size: 11px;
+    padding: 7px 14px; border-radius: 7px; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    white-space: nowrap;
+  }
+  .btn-export:hover { border-color: var(--green); color: var(--green); background: #051a10; }
+  .btn-export.json:hover { border-color: #60a5fa; color: #60a5fa; background: #050d1a; }
+  .btn-export.single:hover { border-color: var(--yellow); color: var(--yellow); background: #1a1200; }
+  .btn-export svg { flex-shrink: 0; }
+
 </style>
 </head>
 <body>
@@ -642,6 +662,21 @@
             <tbody id="csv-table-body"></tbody>
           </table>
         </div>
+
+        <!-- EXPORT BAR -->
+        <div class="export-bar">
+          <button class="btn-export" onclick="exportSummaryCSV()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Summary CSV
+          </button>
+          <button class="btn-export json" onclick="exportFullJSON()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Full JSON (with details)
+          </button>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted);align-self:center;margin-left:4px;">
+            CSV = summary table · JSON = all nutrient contributions per food
+          </span>
+        </div>
       </div>
     </div>
 
@@ -652,8 +687,14 @@
 <!-- DETAIL MODAL -->
 <div class="modal-overlay" id="detail-modal">
   <div class="modal-box">
-    <button class="modal-close" onclick="closeModal()">✕</button>
-    <div id="modal-content"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0;gap:8px;flex-wrap:wrap;">
+      <button class="btn-export single" id="modal-export-btn" onclick="exportSingleJSON(currentModalIdx)" style="margin-bottom:0;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export This Food (JSON)
+      </button>
+      <button class="modal-close" onclick="closeModal()" style="position:static;margin-left:auto;">✕</button>
+    </div>
+    <div id="modal-content" style="margin-top:16px;"></div>
   </div>
 </div>
 
@@ -1178,8 +1219,160 @@ function buildContribTable(features) {
 // ═══════════════════════════════════════════════════════════════════
 const $modal        = document.getElementById('detail-modal');
 const $modalContent = document.getElementById('modal-content');
+let   currentModalIdx = 0;
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+// Helper: trigger a file download
+function downloadFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── Export 1: Summary CSV ────────────────────────────────────────────────────
+// One row per food: name, verdicts, confidence, top signals
+function exportSummaryCSV() {
+  if (!csvResultsData.length) return;
+
+  const rows = [
+    // Header
+    ['#','Food Name','Core Model','All-Features Model',
+     'Confidence Healthy (%)','Confidence Unhealthy (%)',
+     'Top Healthy Signal','Top Unhealthy Signal','Models Agree']
+  ];
+
+  csvResultsData.forEach((r, i) => {
+    const allFeats   = r.all_model.features || [];
+    const topHealthy = allFeats.find(f => f.direction === 'Healthy signal');
+    const topUnhealthy = allFeats.find(f => f.direction === 'Unhealthy signal');
+    const agree = r.core_model.label === r.all_model.label ? 'Yes' : 'No';
+
+    rows.push([
+      i + 1,
+      `"${r.food_name.replace(/"/g, '""')}"`,
+      r.core_model.label,
+      r.all_model.label,
+      r.all_model.prob_healthy,
+      r.all_model.prob_unhealthy,
+      topHealthy   ? `"${topHealthy.reason.replace(/"/g,'""')}"` : '',
+      topUnhealthy ? `"${topUnhealthy.reason.replace(/"/g,'""')}"` : '',
+      agree,
+    ]);
+  });
+
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const ts  = new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+  downloadFile(`nutriscan_summary_${ts}.csv`, csv, 'text/csv');
+}
+
+// ── Export 2: Full JSON (all foods + all feature contributions) ───────────────
+function exportFullJSON() {
+  if (!csvResultsData.length) return;
+
+  const payload = {
+    exported_at:   new Date().toISOString(),
+    total_foods:   csvResultsData.length,
+    summary: {
+      healthy:    csvResultsData.filter(r => r.all_model.label === 'Healthy').length,
+      borderline: csvResultsData.filter(r => r.all_model.label === 'Borderline').length,
+      unhealthy:  csvResultsData.filter(r => r.all_model.label === 'Unhealthy').length,
+    },
+    results: csvResultsData.map((r, i) => ({
+      index:      i + 1,
+      food_name:  r.food_name,
+      verdict: {
+        core_model:        r.core_model.label,
+        all_features_model: r.all_model.label,
+        confidence_healthy:   r.all_model.prob_healthy,
+        confidence_unhealthy: r.all_model.prob_unhealthy,
+        models_agree: r.core_model.label === r.all_model.label,
+      },
+      core_model_details: {
+        label:         r.core_model.label,
+        prob_healthy:  r.core_model.prob_healthy,
+        prob_unhealthy:r.core_model.prob_unhealthy,
+        feature_contributions: (r.core_model.features || []).map(f => ({
+          feature:   f.feature,
+          value:     f.raw_value,
+          direction: f.direction,
+          reason:    f.reason,
+          weight:    f.weight,
+        })),
+      },
+      all_model_details: {
+        label:         r.all_model.label,
+        prob_healthy:  r.all_model.prob_healthy,
+        prob_unhealthy:r.all_model.prob_unhealthy,
+        feature_contributions: (r.all_model.features || []).map(f => ({
+          feature:   f.feature,
+          value:     f.raw_value !== null ? f.raw_value : 'imputed',
+          direction: f.direction,
+          reason:    f.reason,
+          weight:    f.weight,
+        })),
+      },
+      data_notes: {
+        blank_core_fields: r.blank_cores || [],
+      },
+    }))
+  };
+
+  const ts = new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+  downloadFile(`nutriscan_full_${ts}.json`, JSON.stringify(payload, null, 2), 'application/json');
+}
+
+// ── Export 3: Single food JSON (from modal) ───────────────────────────────────
+function exportSingleJSON(idx) {
+  const r = csvResultsData[idx];
+  if (!r) return;
+
+  const payload = {
+    exported_at: new Date().toISOString(),
+    food_name:   r.food_name,
+    verdict: {
+      core_model:         r.core_model.label,
+      all_features_model: r.all_model.label,
+      confidence_healthy:   r.all_model.prob_healthy,
+      confidence_unhealthy: r.all_model.prob_unhealthy,
+      models_agree: r.core_model.label === r.all_model.label,
+    },
+    core_model_details: {
+      label:         r.core_model.label,
+      prob_healthy:  r.core_model.prob_healthy,
+      prob_unhealthy:r.core_model.prob_unhealthy,
+      feature_contributions: (r.core_model.features || []).map(f => ({
+        feature: f.feature, value: f.raw_value,
+        direction: f.direction, reason: f.reason, weight: f.weight,
+      })),
+    },
+    all_model_details: {
+      label:         r.all_model.label,
+      prob_healthy:  r.all_model.prob_healthy,
+      prob_unhealthy:r.all_model.prob_unhealthy,
+      feature_contributions: (r.all_model.features || []).map(f => ({
+        feature: f.feature,
+        value:   f.raw_value !== null ? f.raw_value : 'imputed',
+        direction: f.direction, reason: f.reason, weight: f.weight,
+      })),
+    },
+    data_notes: { blank_core_fields: r.blank_cores || [] },
+  };
+
+  const safeName = r.food_name.replace(/[^a-z0-9]/gi, '_').toLowerCase().slice(0, 40);
+  downloadFile(`nutriscan_${safeName}.json`, JSON.stringify(payload, null, 2), 'application/json');
+}
 
 function openModal(idx) {
+  currentModalIdx = idx;
   const r    = csvResultsData[idx];
   const main = r.all_model;
   const isBorderline = main.is_borderline;
