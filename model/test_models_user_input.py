@@ -18,6 +18,7 @@ optional_features = [
     "added_sugar",  # strongest unhealthy signal (691x ratio)
     "vitamin_c",    # strong healthy signal (6.7x ratio)
     "omega3",       # healthy fat signal — distinguishes salmon/nuts from junk
+    # fiber_to_carb_ratio is computed automatically from fiber and carbohydrates
 ]
 
 
@@ -47,6 +48,8 @@ for feature in optional_features:
     else:
         user_input_all.append(float(raw))
 
+# Compute derived feature — must match training
+
 # Convert to DataFrames for scaling
 X_core_df = pd.DataFrame([user_input_core], columns=core_features)
 X_all_df  = pd.DataFrame([user_input_all],  columns=core_features + optional_features)
@@ -58,21 +61,35 @@ X_all_scaled  = scalers['all'].transform(X_all_imputed)
 
 # Make predictions
 pred_core = models['core'].predict(X_core_scaled)[0]
-pred_all = models['all'].predict(X_all_scaled)[0]
+pred_all  = models['all'].predict(X_all_scaled)[0]
+prob_core = models['core'].predict_proba(X_core_scaled)[0]
+prob_all  = models['all'].predict_proba(X_all_scaled)[0]
 
-# Display results
+# ── Display results ──────────────────────────────────────────────────────────
 print(f"\nFood Item: {food_name}")
 print(f"[Core Model] Prediction: {'Healthy' if pred_core else 'Unhealthy'}")
 print(f"[All Features Model] Prediction: {'Healthy' if pred_all else 'Unhealthy'}")
 
-# Prediction probabilities
-prob_core = models['core'].predict_proba(X_core_scaled)[0]
-prob_all = models['all'].predict_proba(X_all_scaled)[0]
-
 print("\nModel Confidence:")
 print(f"[Core Model] Healthy Probability: {prob_core[1]:.3f}")
 print(f"[Core Model] Unhealthy Probability: {prob_core[0]:.3f}")
-
 print()
 print(f"[All Model] Healthy Probability: {prob_all[1]:.3f}")
 print(f"[All Model] Unhealthy Probability: {prob_all[0]:.3f}")
+
+# ── Top contributing features ─────────────────────────────────────────────────
+def top_features(model, X_scaled, feature_names, top_n=3):
+    contrib = model.coef_[0] * X_scaled[0]
+    ranked  = sorted(zip(feature_names, contrib), key=lambda x: abs(x[1]), reverse=True)
+    return ranked[:top_n]
+
+print("\nWhy the Core Model predicted this:")
+for feat, val in top_features(models['core'], X_core_scaled, core_features):
+    direction = "Healthy signal" if val > 0 else "Unhealthy signal"
+    print(f"  {feat:<22} → {direction}")
+
+print("\nWhy the All-Features Model predicted this:")
+all_feat_names = core_features + optional_features + ["fiber_to_carb_ratio"]
+for feat, val in top_features(models['all'], X_all_scaled, all_feat_names):
+    direction = "Healthy signal" if val > 0 else "Unhealthy signal"
+    print(f"  {feat:<22} → {direction}")
