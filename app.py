@@ -196,6 +196,14 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/debug')
+def debug():
+    return jsonify({
+        "core_features": core_features,
+        "optional_features": optional_features,
+        "core_model_n_features": models['core'].n_features_in_,
+        "all_model_n_features":  models['all'].n_features_in_,
+    })
 
 if __name__ == '__main__':
     app.run(debug=True)
