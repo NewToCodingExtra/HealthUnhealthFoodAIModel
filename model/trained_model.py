@@ -17,16 +17,23 @@ np.random.seed(42)
 
 #declares core or optional features (can add more optional features later, remove this after final edit (the comment only) dev:Joshua)
 core_features = [
-    "calories", "sugar", "fat", "fiber", "protein",
-    "sodium", "cholesterol", "saturated_fat", "carbohydrates"
+    "calories",
+    "carbohydrates",
+    "sugar",
+    "fat",
+    "saturated_fat",
+    "sodium",
+    "protein",
 ]
 optional_features = [
-    "added_sugar",  # strongest unhealthy signal (691x ratio)
-    "vitamin_c",    # strong healthy signal (6.7x ratio)
+    "fiber",        # absent/zero in many meat & processed foods
+    "cholesterol",  # absent in all plant-based foods
+    "added_sugar",  # strongest unhealthy signal — not always on labels
+    "vitamin_c",    # strong healthy signal
     "omega3",       # healthy fat signal — distinguishes salmon/nuts from junk
 ]
 
-df = pd.read_csv('nutrition_data_75k_v2.csv')
+df = pd.read_csv('nutrition_data_125k.csv')
  
 print(f"Dataset loaded: {len(df)} rows")
  
@@ -130,4 +137,4 @@ trained_scalers = {
     'all': scaler_all     # X_all scaler, or a separate one if you used separate scalers
 }
 
-joblib.dump({'models': trained_models, 'scalers': trained_scalers, 'imputer': imputer}, 'trained_model.pkl')
+joblib.dump({'models': trained_models, 'scalers': trained_scalers, 'imputer': imputer, 'optional_features': optional_features, 'core_features': core_features}, 'trained_model.pkl')

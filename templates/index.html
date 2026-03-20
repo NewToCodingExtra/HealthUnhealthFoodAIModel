@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" href="/static/icon/icon.png">
+<title>NutriScan — Food Healthiness Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0a0e1a;
+    --surface:  #111827;
+    --surface2: #1a2235;
+    --border:   #1e2d45;
+    --border2:  #253550;
+    --green:    #00e5a0;
+    --green-dim:#00c488;
+    --red:      #ff4d6d;
+    --red-dim:  #cc3a56;
+    --yellow:   #fbbf24;
+    --text:     #e8edf5;
+    --muted:    #7a8ba8;
+    --mono:     'DM Mono', monospace;
+    --sans:     'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Background grid ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  /* ── Header ── */
+  .header { margin-bottom: 40px; }
+  .header-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .header-tag::before {
+    content: '';
+    width: 20px; height: 1px;
+    background: var(--green);
+  }
+  .header h1 {
+    font-size: clamp(28px, 5vw, 46px);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .header h1 span { color: var(--green); }
+  .header p {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 560px;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .card-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-label::after {
+    content: '';
+    flex: 1; height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Food name input ── */
+  .food-input-wrap { position: relative; }
+  .food-input-wrap label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+  .food-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: var(--sans);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .food-input:focus { border-color: var(--green); }
+  .food-input::placeholder { color: var(--muted); font-weight: 400; }
+
+  /* ── Search bar ── */
+  .search-wrap { position: relative; }
+  .search-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 11px 16px 11px 42px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-input:focus { border-color: var(--green); }
+  .search-input::placeholder { color: var(--muted); }
+  .search-icon {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 15px; pointer-events: none;
+  }
+
+  /* ── Search results dropdown ── */
+  .search-results {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 0;
+  }
+  .search-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 100px;
+    padding: 5px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    white-space: nowrap;
+  }
+  .search-chip:hover { border-color: var(--green); background: #0e2a20; color: var(--green); }
+  .search-chip .chip-arrow { font-size: 10px; }
+  .search-chip .chip-arrow.up { color: var(--green); }
+  .search-chip .chip-arrow.down { color: var(--red); }
+  .search-no-result {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    padding: 6px 0;
+  }
+
+  /* ── Active nutrients panel ── */
+  .active-panel { display: flex; flex-direction: column; gap: 0; }
+  .nutrient-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    animation: slideIn 0.18s ease-out;
+  }
+  .nutrient-row:last-child { border-bottom: none; }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .nutrient-meta { flex: 1; min-width: 0; }
+  .nutrient-name {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .nutrient-name .dir-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.08em;
+  }
+  .dir-up   { background: #0a2e1e; color: var(--green); border: 1px solid #1a5c3a; }
+  .dir-down { background: #2e0a12; color: var(--red);   border: 1px solid #5c1a26; }
+  .always-badge {
+    font-family: var(--mono); font-size: 9px;
+    background: #1a2a40; color: #6b8caf;
+    border: 1px solid #253550;
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .nutrient-desc {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .nutrient-input-group {
+    display: flex; align-items: center; gap: 6px;
+    flex-shrink: 0;
+  }
+  .nutrient-input {
+    width: 90px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    text-align: right;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .nutrient-input:focus { border-color: var(--green); }
+  .nutrient-unit {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    min-width: 28px;
+  }
+  .remove-btn {
+    width: 26px; height: 26px;
+    background: transparent;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    flex-shrink: 0;
+  }
+  .remove-btn:hover { border-color: var(--red); color: var(--red); background: #2e0a12; }
+
+  .empty-state {
+    padding: 24px 0;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .active-count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .active-count span { color: var(--green); font-weight: 500; }
+
+  /* ── Buttons ── */
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+  .btn-primary {
+    flex: 1; min-width: 180px;
+    background: var(--green);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 24px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:hover  { background: var(--green-dim); }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-secondary {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 14px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+
+  /* ── Result panel ── */
+  #result-panel { display: none; }
+  #result-panel.visible { display: block; }
+
+  .result-verdict {
+    display: flex; align-items: center; gap: 20px;
+    padding: 24px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .result-verdict::before {
+    content: '';
+    position: absolute; inset: 0;
+    opacity: 0.06;
+  }
+  .result-verdict.healthy    { border: 1px solid var(--green);  background: #051a10; }
+  .result-verdict.healthy::before    { background: var(--green); }
+  .result-verdict.unhealthy  { border: 1px solid var(--red);    background: #1a0508; }
+  .result-verdict.unhealthy::before  { background: var(--red); }
+  .result-verdict.borderline { border: 1px solid var(--yellow); background: #1a1400; }
+  .result-verdict.borderline::before { background: var(--yellow); }
+  .borderline .verdict-label  { color: var(--yellow); }
+  .borderline .verdict-bar    { background: var(--yellow); }
+
+  .verdict-label {
+    font-size: clamp(32px, 6vw, 52px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .healthy    .verdict-label { color: var(--green); }
+  .unhealthy  .verdict-label { color: var(--red); }
+  .borderline .verdict-label { color: var(--yellow); }
+
+  .verdict-details { flex: 1; }
+  .verdict-food-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .verdict-bar-wrap {
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    height: 6px;
+    margin: 10px 0 8px;
+    overflow: hidden;
+  }
+  .verdict-bar { height: 100%; border-radius: 4px; transition: width 0.6s cubic-bezier(0.16,1,0.3,1); }
+  .healthy    .verdict-bar { background: var(--green); }
+  .unhealthy  .verdict-bar { background: var(--red); }
+  .borderline .verdict-bar { background: var(--yellow); }
+
+  .verdict-scores {
+    display: flex; gap: 20px; flex-wrap: nowrap;
+    font-family: var(--mono);
+    margin-top: 8px;
+  }
+  .score-item {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  }
+  .score-pct  { font-size: 20px; font-weight: 600; line-height: 1; white-space: nowrap; }
+  .score-lbl  { font-size: 9px; color: var(--muted); white-space: nowrap; letter-spacing: 0.08em; text-transform: uppercase; }
+  .healthy  .score-pct.h { color: var(--green); }
+  .unhealthy .score-pct.u { color: var(--red); }
+
+  /* ── Factor table ── */
+  .factor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 560px) { .factor-grid { grid-template-columns: 1fr; } }
+  .factor-col-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+  }
+  .factor-col-label.pos { color: var(--green); background: #051a10; border: 1px solid #0a3a1e; }
+  .factor-col-label.neg { color: var(--red);   background: #1a0508; border: 1px solid #3a0a12; }
+
+  .factor-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 10px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .factor-item.pos { background: #030d07; }
+  .factor-item.neg { background: #0d0305; }
+  .factor-name.pos { color: #9bf5d4; }
+  .factor-name.neg { color: #ffb3c0; }
+  .factor-val.pos  { color: var(--green); font-weight: 500; }
+  .factor-val.neg  { color: var(--red);   font-weight: 500; }
+
+  /* ── Excluded strip ── */
+  .excluded-strip {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    line-height: 1.7;
+  }
+  .excluded-strip strong { color: #5a6e88; }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ── Tabs ── */
+  .tab-bar {
+    display: flex; gap: 4px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 4px;
+    margin-bottom: 24px;
+  }
+  .tab-btn {
+    flex: 1; padding: 10px 16px;
+    background: transparent; border: none; border-radius: 7px;
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+    color: var(--muted); cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .tab-btn:hover { color: var(--text); background: var(--surface2); }
+  .tab-btn.active {
+    background: var(--surface2); color: var(--green);
+    border: 1px solid var(--border2);
+  }
+  .tab-btn.active .tab-icon { color: var(--green); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* ── CSV section (moved inside tab) ── */
+  .csv-drop {
+    border: 2px dashed var(--border2); border-radius: 12px; padding: 40px 20px;
+    text-align: center; cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .csv-drop:hover, .csv-drop.drag-over { border-color: var(--green); background: #051a10; color: var(--green); }
+  .csv-drop input[type=file] { display: none; }
+  .csv-table-wrap { overflow-x: auto; margin-top: 12px; }
+  .csv-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  .csv-table th { text-align: left; color: var(--muted); font-size: 9px; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .csv-table td { padding: 8px 12px; border-bottom: 1px solid #151f30; vertical-align: middle; white-space: nowrap; }
+  .csv-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .verdict-chip { font-size: 10px; padding: 3px 10px; border-radius: 100px; font-weight: 600; letter-spacing: 0.06em; }
+  .verdict-chip.healthy    { background: #051a10; color: var(--green);  border: 1px solid #0a3a1e; }
+  .verdict-chip.unhealthy  { background: #1a0508; color: var(--red);    border: 1px solid #3a0a12; }
+  .verdict-chip.borderline { background: #1a1200; color: var(--yellow); border: 1px solid #5a4200; }
+  .btn-view-detail {
+    background: transparent; border: 1px solid var(--border2); color: var(--muted);
+    font-family: var(--mono); font-size: 10px; padding: 4px 10px; border-radius: 6px;
+    cursor: pointer; transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-view-detail:hover { border-color: var(--green); color: var(--green); }
+
+  /* ── Contribution table ── */
+  .contrib-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; margin-top: 8px; }
+  .contrib-table th { text-align: left; color: var(--muted); font-size: 9px; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .contrib-table td { padding: 7px 8px; border-bottom: 1px solid #151f30; vertical-align: middle; }
+  .contrib-table tr:last-child td { border-bottom: none; }
+  .contrib-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .weight-bar-wrap { width: 100px; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; position: relative; overflow: visible; }
+  .weight-bar { height: 100%; border-radius: 3px; position: absolute; }
+  .weight-bar.pos { background: var(--green); left: 0; }
+  .weight-bar.neg { background: var(--red);   left: 0; }
+  .effect-badge { font-size: 9px; padding: 2px 7px; border-radius: 3px; letter-spacing: 0.06em; white-space: nowrap; }
+  .effect-badge.pos { background: #051a10; color: var(--green); border: 1px solid #0a3a1e; }
+  .effect-badge.neg { background: #1a0508; color: var(--red);   border: 1px solid #3a0a12; }
+
+  /* ── Detail modal ── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    z-index: 100; overflow-y: auto; padding: 40px 20px; }
+  .modal-overlay.open { display: flex; align-items: flex-start; justify-content: center; }
+  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    width: 100%; max-width: 720px; padding: 28px; position: relative; }
+  .modal-close { position: absolute; top: 16px; right: 16px; background: transparent;
+    border: 1px solid var(--border2); color: var(--muted); width: 30px; height: 30px;
+    border-radius: 6px; cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center; }
+  .modal-close:hover { border-color: var(--red); color: var(--red); }
+
+
+  /* ── Export buttons ── */
+  .export-bar {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .btn-export {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; border: 1px solid var(--border2);
+    color: var(--muted); font-family: var(--mono); font-size: 11px;
+    padding: 7px 14px; border-radius: 7px; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    white-space: nowrap;
+  }
+  .btn-export:hover { border-color: var(--green); color: var(--green); background: #051a10; }
+  .btn-export.json:hover { border-color: #60a5fa; color: #60a5fa; background: #050d1a; }
+  .btn-export.single:hover { border-color: var(--yellow); color: var(--yellow); background: #1a1200; }
+  .btn-export svg { flex-shrink: 0; }
+
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-tag">Nutrition Analysis Tool</div>
+    <h1>Nutri<span>Scan</span></h1>
+    <p>Enter a food's nutritional profile. Add only the nutrients that actually exist in that food — absent nutrients are automatically excluded from scoring.</p>
+  </div>
+
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-manual" onclick="switchTab('manual')">
+      <span class="tab-icon">✎</span> Manual Input
+    </button>
+    <button class="tab-btn" id="tab-csv" onclick="switchTab('csv')">
+      <span class="tab-icon">⊞</span> CSV Import
+    </button>
+  </div>
+
+  <!-- ══ TAB: MANUAL ══════════════════════════════════════════════ -->
+  <div class="tab-pane active" id="pane-manual">
+
+    <!-- FOOD NAME -->
+    <div class="card">
+      <div class="card-label">01 — Food Identity</div>
+      <div class="food-input-wrap">
+        <label>FOOD NAME</label>
+        <input type="text" class="food-input" id="food-name" placeholder="e.g. Egg, Brown Rice, Instant Noodles…" autocomplete="off">
+      </div>
+    </div>
+
+    <!-- SEARCH & ADD -->
+    <div class="card">
+      <div class="card-label">02 — Add Optional Features</div>
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input type="text" class="search-input" id="nutrient-search"
+          placeholder="Add optional: fiber, cholesterol, added sugar, vitamin c, omega-3" autocomplete="off">
+      </div>
+      <div class="search-results" id="search-results"></div>
+    </div>
+
+    <!-- ACTIVE NUTRIENTS -->
+    <div class="card">
+      <div class="card-label">03 — Active Nutrients</div>
+      <div class="active-count" id="active-count"><span>1</span> nutrient active</div>
+      <div class="active-panel" id="active-panel"></div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="btn-row">
+      <button class="btn-primary" id="btn-predict">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Analyze Food
+      </button>
+      <button class="btn-secondary" id="btn-reset">Reset All</button>
+    </div>
+
+    <!-- RESULT -->
+    <div id="result-panel" style="margin-top:24px">
+      <div class="card">
+        <div class="card-label">04 — Analysis Result</div>
+        <div id="result-inner"></div>
+      </div>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>More = healthier</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Less = healthier</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--muted)"></div>Per 100 g serving</div>
+      <div class="legend-item" style="margin-left:auto;color:#3a4e65;">NutriScan v2.0 · Logistic Regression Model</div>
+    </div>
+
+  </div><!-- /pane-manual -->
+
+  <!-- ══ TAB: CSV ══════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="pane-csv">
+
+    <div class="card">
+      <div class="card-label">01 — Upload CSV File</div>
+      <p style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.8;margin-bottom:16px;">
+        Required columns: <span style="color:var(--text)">calories, carbohydrates, sugar, fat, saturated_fat, sodium, protein</span><br>
+        Optional columns: <span style="color:var(--text)">fiber, cholesterol, added_sugar, vitamin_c, omega3, name / food_name</span><br>
+        Missing optional columns are automatically estimated by the model.
+      </p>
+      <div class="csv-drop" id="csv-drop">
+        <div style="font-size:32px;margin-bottom:10px;">📂</div>
+        <div style="font-weight:600;margin-bottom:4px;">Drop your CSV here</div>
+        <div>or <span style="color:var(--green);text-decoration:underline;cursor:pointer"
+          onclick="event.stopPropagation();document.getElementById('csv-file-input').click()">browse files</span></div>
+        <div style="font-size:10px;margin-top:8px;color:#4a5e78">Accepts .csv files only · All values per 100g</div>
+        <input type="file" id="csv-file-input" accept=".csv">
+      </div>
+      <div id="csv-status" style="margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--muted);min-height:20px;"></div>
+    </div>
+
+    <!-- RESULTS TABLE -->
+    <div id="csv-results-wrap" style="display:none;">
+      <div class="card">
+        <div class="card-label">02 — Classification Report</div>
+        <div id="csv-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;"></div>
+        <div class="csv-table-wrap">
+          <table class="csv-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Food Name</th>
+                <th>Core Model</th>
+                <th>All-Features Model</th>
+                <th>Confidence (Healthy)</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="csv-table-body"></tbody>
+          </table>
+        </div>
+
+        <!-- EXPORT BAR -->
+        <div class="export-bar">
+          <button class="btn-export" onclick="exportSummaryCSV()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Summary CSV
+          </button>
+          <button class="btn-export json" onclick="exportFullJSON()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Full JSON (with details)
+          </button>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted);align-self:center;margin-left:4px;">
+            CSV = summary table · JSON = all nutrient contributions per food
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /pane-csv -->
+
+</div><!-- /app -->
+
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0;gap:8px;flex-wrap:wrap;">
+      <button class="btn-export single" id="modal-export-btn" onclick="exportSingleJSON(currentModalIdx)" style="margin-bottom:0;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export This Food (JSON)
+      </button>
+      <button class="modal-close" onclick="closeModal()" style="position:static;margin-left:auto;">✕</button>
+    </div>
+    <div id="modal-content" style="margin-top:16px;"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// NUTRIENT REGISTRY — only features the model is trained on
+// Core (9): always shown, all required for prediction
+// Optional (3): searchable, improve accuracy if provided
+// ═══════════════════════════════════════════════════════════════════
+// Core (7): on every nutrition label — always required, always shown
+// Optional (5): not in all foods — searchable, improve accuracy if provided
+const CORE_KEYS     = ["calories","carbohydrates","sugar","fat","saturated_fat","sodium","protein"];
+const OPTIONAL_KEYS = ["fiber","cholesterol","added_sugar","vitamin_c","omega3"];
+
+const NUTRIENTS = [
+  // ── CORE — always shown ───────────────────────────────────────────
+  {key:"calories",      label:"Calories",      unit:"kcal", dir:-1, max:900,  desc:"Total energy per 100 g"},
+  {key:"carbohydrates", label:"Carbohydrates", unit:"g",    dir:-1, max:100,  desc:"Total carbohydrates per 100 g"},
+  {key:"sugar",         label:"Sugar",         unit:"g",    dir:-1, max:60,   desc:"Total sugars per 100 g"},
+  {key:"fat",           label:"Fat",           unit:"g",    dir:-1, max:50,   desc:"Total fat per 100 g"},
+  {key:"saturated_fat", label:"Saturated Fat", unit:"g",    dir:-1, max:30,   desc:"Saturated fat per 100 g"},
+  {key:"sodium",        label:"Sodium",        unit:"mg",   dir:-1, max:2000, desc:"Sodium per 100 g"},
+  {key:"protein",       label:"Protein",       unit:"g",    dir:+1, max:50,   desc:"Protein per 100 g"},
+  // ── OPTIONAL — add for better accuracy ───────────────────────────
+  {key:"fiber",         label:"Fiber",         unit:"g",    dir:+1, max:20,   desc:"Not present in all foods"},
+  {key:"cholesterol",   label:"Cholesterol",   unit:"mg",   dir:-1, max:300,  desc:"Absent in plant-based foods"},
+  {key:"added_sugar",   label:"Added Sugar",   unit:"g",    dir:-1, max:50,   desc:"Strongest unhealthy signal"},
+  {key:"vitamin_c",     label:"Vitamin C",     unit:"mg",   dir:+1, max:100,  desc:"Strong healthy signal"},
+  {key:"omega3",        label:"Omega-3",       unit:"g",    dir:+1, max:5,    desc:"Healthy fat signal"},
+];
+
+const KEYS  = NUTRIENTS.map(n => n.key);
+const N_MAP = Object.fromEntries(NUTRIENTS.map(n => [n.key, n]));
+const ALWAYS_ON = CORE_KEYS;   // all 9 core features are always shown
+
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+const activeNutrients = new Map(); // key → value (number)
+// All 9 core features are always active
+CORE_KEYS.forEach(k => activeNutrients.set(k, 0));
+
+// ═══════════════════════════════════════════════════════════════════
+// DOM REFS
+// ═══════════════════════════════════════════════════════════════════
+const $foodName    = document.getElementById('food-name');
+const $search      = document.getElementById('nutrient-search');
+const $searchRes   = document.getElementById('search-results');
+const $panel       = document.getElementById('active-panel');
+const $count       = document.getElementById('active-count');
+const $btnPredict  = document.getElementById('btn-predict');
+const $btnReset    = document.getElementById('btn-reset');
+const $resultPanel = document.getElementById('result-panel');
+const $resultInner = document.getElementById('result-inner');
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER ACTIVE PANEL
+// ═══════════════════════════════════════════════════════════════════
+function renderPanel() {
+  const n = activeNutrients.size;
+  $count.innerHTML = `<span>${n}</span> nutrient${n === 1 ? '' : 's'} active`;
+
+  if (n === 0) {
+    $panel.innerHTML = '<div class="empty-state">No nutrients added yet.<br>Search above to add nutrients.</div>';
+    return;
+  }
+
+  $panel.innerHTML = '';
+  for (const [key, val] of activeNutrients) {
+    const meta    = N_MAP[key];
+    const isAlways = ALWAYS_ON.includes(key);
+    const dirClass = meta.dir === 1 ? 'up' : 'down';
+    const dirLabel = meta.dir === 1 ? '▲ MORE' : '▼ LESS';
+    const dirCls   = meta.dir === 1 ? 'dir-up' : 'dir-down';
+
+    const row = document.createElement('div');
+    row.className = 'nutrient-row';
+    row.dataset.key = key;
+
+    row.innerHTML = `
+      <div class="nutrient-meta">
+        <div class="nutrient-name">
+          ${meta.label}
+          <span class="dir-badge ${dirCls}">${dirLabel}</span>
+          ${isAlways ? '<span class="always-badge">ALWAYS ON</span>' : ''}
+        </div>
+        <div class="nutrient-desc">${meta.desc}</div>
+      </div>
+      <div class="nutrient-input-group">
+        <input type="number" class="nutrient-input" data-key="${key}"
+          value="${val === null ? '' : val}" min="0" max="${meta.max * 3}" step="0.1"
+          placeholder="0">
+        <span class="nutrient-unit">${meta.unit}</span>
+      </div>
+      ${isAlways
+        ? '<div style="width:26px"></div>'
+        : `<button class="remove-btn" data-key="${key}" title="Remove">✕</button>`}
+    `;
+
+    $panel.appendChild(row);
+  }
+
+  // Bind input changes
+  $panel.querySelectorAll('.nutrient-input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const k = e.target.dataset.key;
+      const raw = e.target.value.trim();
+      activeNutrients.set(k, raw === '' ? null : parseFloat(raw));
+    });
+  });
+
+  // Bind remove buttons
+  $panel.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const k = e.currentTarget.dataset.key;
+      activeNutrients.delete(k);
+      renderPanel();
+      renderSearch($search.value);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════════════════════════
+function renderSearch(query) {
+  $searchRes.innerHTML = '';
+  if (!query.trim()) return;
+
+  const q = query.toLowerCase();
+  const matches = NUTRIENTS.filter(n =>
+    OPTIONAL_KEYS.includes(n.key) &&
+    (n.label.toLowerCase().includes(q) || n.key.toLowerCase().includes(q)) &&
+    !activeNutrients.has(n.key)
+  ).slice(0, 9);
+
+  if (matches.length === 0) {
+    const alreadyAdded = NUTRIENTS.filter(n =>
+      (n.label.toLowerCase().includes(q) || n.key.toLowerCase().includes(q)) &&
+      activeNutrients.has(n.key)
+    );
+    $searchRes.innerHTML = `<span class="search-no-result">${
+      alreadyAdded.length
+        ? 'All matching nutrients already added.'
+        : `No nutrients found for "${query}".`
+    }</span>`;
+    return;
+  }
+
+  matches.forEach(n => {
+    const chip = document.createElement('button');
+    chip.className = 'search-chip';
+    chip.innerHTML = `<span class="chip-arrow ${n.dir === 1 ? 'up' : 'down'}">${n.dir === 1 ? '▲' : '▼'}</span>${n.label} <span style="color:#4a5e78;font-size:10px">${n.unit}</span>`;
+    chip.addEventListener('click', () => {
+      activeNutrients.set(n.key, null);  // null = unknown, will be imputed
+      renderPanel();
+      $search.value = '';
+      $searchRes.innerHTML = '';
+      // Scroll to new row
+      setTimeout(() => {
+        const el = $panel.querySelector(`[data-key="${n.key}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    });
+    $searchRes.appendChild(chip);
+  });
+}
+
+$search.addEventListener('input', e => renderSearch(e.target.value));
+
+// ═══════════════════════════════════════════════════════════════════
+// PREDICT
+// ═══════════════════════════════════════════════════════════════════
+$btnPredict.addEventListener('click', async () => {
+  // ── Validate core features ───────────────────────────────────────────────
+  // Core features must all have a value (blank = accidental, not genuinely unknown)
+  // 0 is valid (e.g. cholesterol=0 for plant foods), only truly blank inputs are caught
+  const blankCores = CORE_KEYS.filter(k => {
+    const input = document.querySelector(`.nutrient-input[data-key="${k}"]`);
+    return input && input.value.trim() === '';
+  });
+
+  if (blankCores.length > 0) {
+    const labels = blankCores.map(k => N_MAP[k].label).join(', ');
+    alert(`Please enter a value for: ${labels}\n\nEnter 0 if the food genuinely has none (e.g. Cholesterol = 0 for plant-based foods).`);
+    // Highlight the blank fields
+    blankCores.forEach(k => {
+      const input = document.querySelector(`.nutrient-input[data-key="${k}"]`);
+      if (input) {
+        input.style.borderColor = 'var(--red)';
+        setTimeout(() => input.style.borderColor = '', 3000);
+      }
+    });
+    return;
+  }
+
+  // null values = user didn't enter optional feature → Flask converts to NaN → imputer estimates
+  const nutrients = Object.fromEntries(activeNutrients);
+  const food      = $foodName.value.trim() || 'Unknown Food';
+
+  // Show loading state
+  $resultPanel.classList.add('visible');
+  $resultInner.innerHTML = `
+    <div style="text-align:center;padding:32px;font-family:var(--mono);color:var(--muted);font-size:13px;">
+      <div style="font-size:24px;margin-bottom:12px;animation:spin 1s linear infinite;display:inline-block">⟳</div>
+      <div>Running models…</div>
+    </div>
+    <style>@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}</style>
+  `;
+
+  try {
+    const response = await fetch('/predict', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ food_name: food, nutrients })
+    });
+
+    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    const d = await response.json();
+    if (d.error) throw new Error(d.error);
+
+    // ── Use the All-Features model as the main verdict ──────────────────────
+    const main         = d.all_model;
+    const isBorderline = main.is_borderline;
+    const isHealthy    = main.is_healthy;
+    const verdictClass = isBorderline ? 'borderline' : (isHealthy ? 'healthy' : 'unhealthy');
+    const verdictWord  = isBorderline ? 'BORDERLINE'  : (isHealthy ? 'HEALTHY' : 'UNHEALTHY');
+    const pctH = main.prob_healthy;
+    const pctU = main.prob_unhealthy;
+    // confidence bar width: show whichever side is dominant, or 50% for borderline
+    const barWidth = isBorderline ? 50 : (isHealthy ? pctH : pctU);
+
+    // Absent nutrients strip
+    const activeKeys = new Set(Object.keys(nutrients));
+    const absentKeys = KEYS.filter(k => !activeKeys.has(k));
+    const absentStr  = absentKeys.slice(0, 14).map(k => N_MAP[k].label).join(', ')
+      + (absentKeys.length > 14 ? ` … +${absentKeys.length - 14} more` : '');
+
+    // Top feature rows
+    function featureRows(feats) {
+      if (!feats || feats.length === 0)
+        return `<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:6px 10px">No significant factors</div>`;
+      return feats.map(f => {
+        const isGood = f.direction === 'Healthy signal';
+        return `
+          <div class="factor-item ${isGood ? 'pos' : 'neg'}">
+            <span class="factor-name ${isGood ? 'pos' : 'neg'}">${f.reason}</span>
+          </div>`;
+      }).join('');
+    }
+
+    // Model comparison row
+    const coreHealthy = d.core_model.is_healthy;
+    const coreColor   = d.core_model.is_borderline ? 'var(--yellow)' : (coreHealthy ? 'var(--green)' : 'var(--red)');
+    const allColor    = isBorderline ? 'var(--yellow)' : (isHealthy ? 'var(--green)' : 'var(--red)');
+
+    $resultInner.innerHTML = `
+      ${d.warning ? `
+        <div style="background:#1a1400;border:1px solid #5a4200;border-radius:8px;
+          padding:10px 14px;margin-bottom:14px;font-family:var(--mono);font-size:11px;color:#fbbf24;">
+          ${d.warning}
+        </div>` : ''}
+      ${isBorderline ? `
+        <div style="background:#1a1200;border:1px solid var(--yellow);border-radius:8px;
+          padding:10px 14px;margin-bottom:14px;font-family:var(--mono);font-size:11px;color:var(--yellow);line-height:1.6;">
+          ⚠️ <strong>Borderline result</strong> — the model is not confident enough to call this Healthy or Unhealthy
+          (${pctH}% healthy vs ${pctU}% unhealthy). Try adding optional features like Added Sugar, Vitamin C, or Omega-3 for a clearer verdict.
+        </div>` : ''}
+
+      <!-- Main verdict -->
+      <div class="result-verdict ${verdictClass}">
+        <div class="verdict-label">${verdictWord}</div>
+        <div class="verdict-details">
+          <div class="verdict-food-name">${d.food_name}</div>
+          <div class="verdict-bar-wrap">
+            <div class="verdict-bar" style="width:${barWidth}%"></div>
+          </div>
+          <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.12em;color:var(--muted);margin-bottom:8px;text-transform:uppercase;">Model Confidence</div>
+          <div class="verdict-scores">
+            <div class="score-item">
+              <span class="score-pct h" style="color:${isBorderline ? 'var(--muted)' : (isHealthy ? 'var(--green)' : 'var(--muted)')}">${pctH}%</span>
+              <span class="score-lbl">Confidence: Healthy</span>
+            </div>
+            <div class="score-item">
+              <span class="score-pct u" style="color:${isBorderline ? 'var(--muted)' : (!isHealthy ? 'var(--red)' : 'var(--muted)')}">${pctU}%</span>
+              <span class="score-lbl">Confidence: Unhealthy</span>
+            </div>
+            <div class="score-item">
+              <span class="score-pct" style="font-size:18px;color:var(--muted)">${activeNutrients.size}</span>
+              <span class="score-lbl">Nutrients Used</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Model comparison -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;">
+          <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.15em;color:var(--muted);margin-bottom:8px;">CORE MODEL (9 features)</div>
+          <div style="font-size:18px;font-weight:700;color:${coreColor};margin-bottom:4px;">${d.core_model.label.toUpperCase()}</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:2px;letter-spacing:0.1em;">CONFIDENCE</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);">
+            Healthy: <span style="color:var(--green)">${d.core_model.prob_healthy}%</span> &nbsp;
+            Unhealthy: <span style="color:var(--red)">${d.core_model.prob_unhealthy}%</span>
+          </div>
+          <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:4px;">TOP SIGNALS:</div>
+          ${d.core_model.features.map(f => {
+            const isGood = f.direction === 'Healthy signal';
+            return `<div style="font-family:var(--mono);font-size:10px;padding:3px 0;
+              color:${isGood ? 'var(--green)' : 'var(--red)'}">
+              ${isGood ? '▲' : '▼'} ${f.reason}
+            </div>`;
+          }).join('')}
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:16px;">
+          <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.15em;color:var(--muted);margin-bottom:8px;">ALL-FEATURES MODEL (12 features)</div>
+          <div style="font-size:18px;font-weight:700;color:${allColor};margin-bottom:4px;">${d.all_model.label.toUpperCase()}</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:2px;letter-spacing:0.1em;">CONFIDENCE</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);">
+            Healthy: <span style="color:var(--green)">${d.all_model.prob_healthy}%</span> &nbsp;
+            Unhealthy: <span style="color:var(--red)">${d.all_model.prob_unhealthy}%</span>
+          </div>
+          <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:4px;">TOP SIGNALS:</div>
+          ${d.all_model.features.map(f => {
+            const isGood = f.direction === 'Healthy signal';
+            return `<div style="font-family:var(--mono);font-size:10px;padding:3px 0;
+              color:${isGood ? 'var(--green)' : 'var(--red)'}">
+              ${isGood ? '▲' : '▼'} ${f.reason}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Full contribution table -->
+      <div style="margin-top:4px;">
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.15em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">
+          Full Nutrient Contribution Breakdown
+        </div>
+        ${buildContribTable(d.all_model.features)}
+      </div>
+    `;
+
+  } catch (err) {
+    $resultInner.innerHTML = `
+      <div style="padding:20px;font-family:var(--mono);font-size:12px;color:var(--red);
+        background:#1a0508;border:1px solid var(--red);border-radius:8px;">
+        <strong>Error:</strong> ${err.message}<br>
+        <span style="color:var(--muted);font-size:11px;">Make sure Flask is running on localhost:5000</span>
+      </div>`;
+  }
+
+  $resultPanel.classList.add('visible');
+  setTimeout(() => {
+    $resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 80);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// RESET
+// ═══════════════════════════════════════════════════════════════════
+$btnReset.addEventListener('click', () => {
+  activeNutrients.clear();
+  CORE_KEYS.forEach(k => activeNutrients.set(k, 0));  // restore all core features
+  $foodName.value = '';
+  $search.value = '';
+  $searchRes.innerHTML = '';
+  $resultPanel.classList.remove('visible');
+  $resultInner.innerHTML = '';
+  renderPanel();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+renderPanel();
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('pane-' + tab).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CSV BATCH ANALYSIS
+// ═══════════════════════════════════════════════════════════════════
+let csvResultsData = [];
+
+const $csvDrop        = document.getElementById('csv-drop');
+const $csvFileInput   = document.getElementById('csv-file-input');
+const $csvStatus      = document.getElementById('csv-status');
+const $csvResultsWrap = document.getElementById('csv-results-wrap');
+const $csvTableBody   = document.getElementById('csv-table-body');
+const $csvSummary     = document.getElementById('csv-summary');
+
+$csvDrop.addEventListener('dragover',  e => { e.preventDefault(); $csvDrop.classList.add('drag-over'); });
+$csvDrop.addEventListener('dragleave', ()  => $csvDrop.classList.remove('drag-over'));
+$csvDrop.addEventListener('drop', e => {
+  e.preventDefault();
+  $csvDrop.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleCsvFile(file);
+});
+$csvDrop.addEventListener('click', () => $csvFileInput.click());
+$csvFileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleCsvFile(e.target.files[0]);
+});
+
+async function handleCsvFile(file) {
+  if (!file.name.endsWith('.csv')) {
+    $csvStatus.innerHTML = '<span style="color:var(--red)">✗ Please upload a .csv file</span>';
+    return;
+  }
+  $csvStatus.innerHTML = '<span style="color:var(--muted)">⟳ Uploading and analyzing…</span>';
+  $csvResultsWrap.style.display = 'none';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch('/predict-csv', { method: 'POST', body: formData });
+    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    csvResultsData = data.results;
+    $csvStatus.innerHTML = `<span style="color:var(--green)">✓ Analyzed ${data.results.length} food item${data.results.length !== 1 ? 's' : ''} from <strong>${file.name}</strong></span>`;
+    renderCsvTable(data.results);
+  } catch (err) {
+    $csvStatus.innerHTML = `<span style="color:var(--red)">✗ ${err.message}</span>`;
+  }
+}
+
+function verdictChip(label) {
+  return `<span class="verdict-chip ${label.toLowerCase()}">${label.toUpperCase()}</span>`;
+}
+
+function renderCsvTable(results) {
+  const counts = { Healthy: 0, Unhealthy: 0, Borderline: 0 };
+  results.forEach(r => { counts[r.all_model.label] = (counts[r.all_model.label] || 0) + 1; });
+
+  $csvSummary.innerHTML = [
+    ['Healthy',    'var(--green)',  counts.Healthy    || 0],
+    ['Borderline', 'var(--yellow)', counts.Borderline || 0],
+    ['Unhealthy',  'var(--red)',    counts.Unhealthy   || 0],
+  ].map(([label, color, n]) => `
+    <div style="display:flex;flex-direction:column;align-items:center;
+      background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+      padding:12px 24px;min-width:90px;">
+      <span style="font-size:26px;font-weight:800;color:${color};line-height:1">${n}</span>
+      <span style="font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-top:4px">${label}</span>
+    </div>`).join('');
+
+  $csvTableBody.innerHTML = results.map((r, i) => `
+    <tr>
+      <td style="color:var(--muted)">${i + 1}</td>
+      <td style="color:var(--text);font-weight:600">${r.food_name}</td>
+      <td>${verdictChip(r.core_model.label)}</td>
+      <td>${verdictChip(r.all_model.label)}</td>
+      <td>
+        <span style="color:var(--green);font-weight:600">${r.all_model.prob_healthy}%</span>
+        <span style="color:var(--muted);font-size:9px"> healthy</span>
+      </td>
+      <td><button class="btn-view-detail" onclick="openModal(${i})">View Details</button></td>
+    </tr>`).join('');
+
+  $csvResultsWrap.style.display = 'block';
+  setTimeout(() => $csvResultsWrap.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CONTRIBUTION TABLE BUILDER (shared by manual + modal)
+// ═══════════════════════════════════════════════════════════════════
+function buildContribTable(features) {
+  if (!features || features.length === 0)
+    return '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:12px">No feature data available.</div>';
+
+  const maxAbs = Math.max(...features.map(f => Math.abs(f.weight)), 0.001);
+
+  return `<table class="contrib-table">
+    <thead><tr>
+      <th>Nutrient</th>
+      <th>Value</th>
+      <th>Effect on Score</th>
+      <th>Weight</th>
+    </tr></thead>
+    <tbody>
+    ${features.map(f => {
+      const isPos  = f.direction === 'Healthy signal';
+      const barPct = Math.min(Math.abs(f.weight) / maxAbs * 100, 100);
+      const unit   = (N_MAP[f.feature] || {}).unit || '';
+      const rawStr = (f.raw_value !== null && f.raw_value !== undefined)
+        ? `${f.raw_value} <span style="color:#4a5e78;font-size:9px">${unit}</span>`
+        : '<span style="color:#4a5e78;font-style:italic;font-size:10px">imputed</span>';
+      return `<tr>
+        <td style="color:var(--text);font-weight:500">${f.label}</td>
+        <td style="font-family:var(--mono)">${rawStr}</td>
+        <td><span class="effect-badge ${isPos?'pos':'neg'}">${isPos?'▲ healthier':'▼ unhealthier'}</span></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="weight-bar-wrap">
+              <div class="weight-bar ${isPos?'pos':'neg'}" style="width:${barPct}%"></div>
+            </div>
+            <span style="color:${isPos?'var(--green)':'var(--red)'};min-width:56px;text-align:right;font-family:var(--mono)">
+              ${f.weight > 0 ? '+' : ''}${f.weight.toFixed(4)}
+            </span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DETAIL MODAL (CSV rows)
+// ═══════════════════════════════════════════════════════════════════
+const $modal        = document.getElementById('detail-modal');
+const $modalContent = document.getElementById('modal-content');
+let   currentModalIdx = 0;
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+// Helper: trigger a file download
+function downloadFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── Export 1: Summary CSV ────────────────────────────────────────────────────
+// One row per food: name, verdicts, confidence, top signals
+function exportSummaryCSV() {
+  if (!csvResultsData.length) return;
+
+  const rows = [
+    // Header
+    ['#','Food Name','Core Model','All-Features Model',
+     'Confidence Healthy (%)','Confidence Unhealthy (%)',
+     'Top Healthy Signal','Top Unhealthy Signal','Models Agree']
+  ];
+
+  csvResultsData.forEach((r, i) => {
+    const allFeats   = r.all_model.features || [];
+    const topHealthy = allFeats.find(f => f.direction === 'Healthy signal');
+    const topUnhealthy = allFeats.find(f => f.direction === 'Unhealthy signal');
+    const agree = r.core_model.label === r.all_model.label ? 'Yes' : 'No';
+
+    rows.push([
+      i + 1,
+      `"${r.food_name.replace(/"/g, '""')}"`,
+      r.core_model.label,
+      r.all_model.label,
+      r.all_model.prob_healthy,
+      r.all_model.prob_unhealthy,
+      topHealthy   ? `"${topHealthy.reason.replace(/"/g,'""')}"` : '',
+      topUnhealthy ? `"${topUnhealthy.reason.replace(/"/g,'""')}"` : '',
+      agree,
+    ]);
+  });
+
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const ts  = new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+  downloadFile(`nutriscan_summary_${ts}.csv`, csv, 'text/csv');
+}
+
+// ── Export 2: Full JSON (all foods + all feature contributions) ───────────────
+function exportFullJSON() {
+  if (!csvResultsData.length) return;
+
+  const payload = {
+    exported_at:   new Date().toISOString(),
+    total_foods:   csvResultsData.length,
+    summary: {
+      healthy:    csvResultsData.filter(r => r.all_model.label === 'Healthy').length,
+      borderline: csvResultsData.filter(r => r.all_model.label === 'Borderline').length,
+      unhealthy:  csvResultsData.filter(r => r.all_model.label === 'Unhealthy').length,
+    },
+    results: csvResultsData.map((r, i) => ({
+      index:      i + 1,
+      food_name:  r.food_name,
+      verdict: {
+        core_model:        r.core_model.label,
+        all_features_model: r.all_model.label,
+        confidence_healthy:   r.all_model.prob_healthy,
+        confidence_unhealthy: r.all_model.prob_unhealthy,
+        models_agree: r.core_model.label === r.all_model.label,
+      },
+      core_model_details: {
+        label:         r.core_model.label,
+        prob_healthy:  r.core_model.prob_healthy,
+        prob_unhealthy:r.core_model.prob_unhealthy,
+        feature_contributions: (r.core_model.features || []).map(f => ({
+          feature:   f.feature,
+          value:     f.raw_value,
+          direction: f.direction,
+          reason:    f.reason,
+          weight:    f.weight,
+        })),
+      },
+      all_model_details: {
+        label:         r.all_model.label,
+        prob_healthy:  r.all_model.prob_healthy,
+        prob_unhealthy:r.all_model.prob_unhealthy,
+        feature_contributions: (r.all_model.features || []).map(f => ({
+          feature:   f.feature,
+          value:     f.raw_value !== null ? f.raw_value : 'imputed',
+          direction: f.direction,
+          reason:    f.reason,
+          weight:    f.weight,
+        })),
+      },
+      data_notes: {
+        blank_core_fields: r.blank_cores || [],
+      },
+    }))
+  };
+
+  const ts = new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+  downloadFile(`nutriscan_full_${ts}.json`, JSON.stringify(payload, null, 2), 'application/json');
+}
+
+// ── Export 3: Single food JSON (from modal) ───────────────────────────────────
+function exportSingleJSON(idx) {
+  const r = csvResultsData[idx];
+  if (!r) return;
+
+  const payload = {
+    exported_at: new Date().toISOString(),
+    food_name:   r.food_name,
+    verdict: {
+      core_model:         r.core_model.label,
+      all_features_model: r.all_model.label,
+      confidence_healthy:   r.all_model.prob_healthy,
+      confidence_unhealthy: r.all_model.prob_unhealthy,
+      models_agree: r.core_model.label === r.all_model.label,
+    },
+    core_model_details: {
+      label:         r.core_model.label,
+      prob_healthy:  r.core_model.prob_healthy,
+      prob_unhealthy:r.core_model.prob_unhealthy,
+      feature_contributions: (r.core_model.features || []).map(f => ({
+        feature: f.feature, value: f.raw_value,
+        direction: f.direction, reason: f.reason, weight: f.weight,
+      })),
+    },
+    all_model_details: {
+      label:         r.all_model.label,
+      prob_healthy:  r.all_model.prob_healthy,
+      prob_unhealthy:r.all_model.prob_unhealthy,
+      feature_contributions: (r.all_model.features || []).map(f => ({
+        feature: f.feature,
+        value:   f.raw_value !== null ? f.raw_value : 'imputed',
+        direction: f.direction, reason: f.reason, weight: f.weight,
+      })),
+    },
+    data_notes: { blank_core_fields: r.blank_cores || [] },
+  };
+
+  const safeName = r.food_name.replace(/[^a-z0-9]/gi, '_').toLowerCase().slice(0, 40);
+  downloadFile(`nutriscan_${safeName}.json`, JSON.stringify(payload, null, 2), 'application/json');
+}
+
+function openModal(idx) {
+  currentModalIdx = idx;
+  const r    = csvResultsData[idx];
+  const main = r.all_model;
+  const isBorderline = main.is_borderline;
+  const isHealthy    = main.is_healthy;
+  const verdictColor = isBorderline ? 'var(--yellow)' : (isHealthy ? 'var(--green)' : 'var(--red)');
+  const verdictWord  = isBorderline ? 'BORDERLINE' : (isHealthy ? 'HEALTHY' : 'UNHEALTHY');
+  const coreColor    = r.core_model.is_borderline ? 'var(--yellow)' : (r.core_model.is_healthy ? 'var(--green)' : 'var(--red)');
+  const bgColor      = isBorderline ? '#1a1200' : (isHealthy ? '#051a10' : '#1a0508');
+
+  $modalContent.innerHTML = `
+    <div style="margin-bottom:20px;">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.12em;margin-bottom:4px;">FOOD ITEM</div>
+      <div style="font-size:24px;font-weight:800;letter-spacing:-0.02em">${r.food_name}</div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:20px;background:${bgColor};
+      border:1px solid ${verdictColor};border-radius:10px;padding:18px 22px;margin-bottom:16px;">
+      <div style="font-size:36px;font-weight:800;color:${verdictColor};letter-spacing:-0.03em;line-height:1">${verdictWord}</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:2;">
+        Confidence: Healthy <span style="color:var(--green);font-weight:600">${main.prob_healthy}%</span>
+        &nbsp;·&nbsp;
+        Unhealthy <span style="color:var(--red);font-weight:600">${main.prob_unhealthy}%</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.12em;margin-bottom:6px;">CORE MODEL · 7 features</div>
+        <div style="font-size:18px;font-weight:700;color:${coreColor};margin-bottom:4px">${r.core_model.label.toUpperCase()}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);">
+          Healthy <span style="color:var(--green)">${r.core_model.prob_healthy}%</span>
+          &nbsp;·&nbsp; Unhealthy <span style="color:var(--red)">${r.core_model.prob_unhealthy}%</span>
+        </div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:14px 16px;">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.12em;margin-bottom:6px;">ALL-FEATURES MODEL · 12 features</div>
+        <div style="font-size:18px;font-weight:700;color:${verdictColor};margin-bottom:4px">${main.label.toUpperCase()}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);">
+          Healthy <span style="color:var(--green)">${main.prob_healthy}%</span>
+          &nbsp;·&nbsp; Unhealthy <span style="color:var(--red)">${main.prob_unhealthy}%</span>
+        </div>
+      </div>
+    </div>
+
+    ${r.blank_cores && r.blank_cores.length > 0 ? `
+      <div style="background:#0d1520;border:1px solid var(--border2);border-radius:8px;
+        padding:10px 14px;margin-bottom:14px;font-family:var(--mono);font-size:11px;color:var(--muted);">
+        ⚠️ These core fields were missing in the CSV and defaulted to 0:
+        <span style="color:var(--yellow)">${r.blank_cores.join(', ')}</span>
+      </div>` : ''}
+
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.15em;color:var(--muted);
+      text-transform:uppercase;margin-bottom:8px;">Full Nutrient Contribution Breakdown</div>
+    <div style="overflow-x:auto;">
+      ${buildContribTable(main.features)}
+    </div>
+  `;
+
+  $modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  $modal.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+$modal.addEventListener('click', e => { if (e.target === $modal) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+</script>
+</body>
+</html>
