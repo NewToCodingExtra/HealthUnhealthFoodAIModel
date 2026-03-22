@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" href="/static/icon/icon.png">
+<title>NutriScan - Nutrition Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/index.css">
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="header-tag">Nutrition Intelligence Dashboard</div>
+    <h1>Nutri<span>Scan</span></h1>
+    <p>Analyze food nutrition with a cleaner report view. Enter nutrients per 100 g and compare model confidence for healthier choices.</p>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-manual" onclick="switchTab('manual')">
+      <span class="tab-icon">✎</span> Manual Input
+    </button>
+    <button class="tab-btn" id="tab-csv" onclick="switchTab('csv')">
+      <span class="tab-icon">⊞</span> CSV Import
+    </button>
+  </div>
+
+  <div class="tab-pane active" id="pane-manual">
+    <div class="card">
+      <div class="card-label">01 - Food Identity</div>
+      <div class="food-input-wrap">
+        <label>FOOD NAME</label>
+        <input type="text" class="food-input" id="food-name" placeholder="e.g. Egg, Brown Rice, Instant Noodles..." autocomplete="off">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">02 - Add Optional Features</div>
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input type="text" class="search-input" id="nutrient-search"
+          placeholder="Add optional: fiber, cholesterol, added sugar, vitamin c, omega-3" autocomplete="off">
+      </div>
+      <div class="search-results" id="search-results"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">03 - Active Nutrients</div>
+      <div class="active-count" id="active-count"><span>1</span> nutrient active</div>
+      <div class="active-panel" id="active-panel"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="btn-predict">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Analyze Food
+      </button>
+      <button class="btn-secondary" id="btn-reset">Reset All</button>
+    </div>
+
+    <div id="result-panel" class="result-panel-spacing">
+      <div class="card">
+        <div class="card-label">04 - Analysis Result</div>
+        <div id="result-inner"></div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot legend-dot-green"></div>More = healthier</div>
+      <div class="legend-item"><div class="legend-dot legend-dot-red"></div>Less = healthier</div>
+      <div class="legend-item"><div class="legend-dot legend-dot-muted"></div>Per 100 g serving</div>
+      <div class="legend-item legend-item-version">NutriScan v2.0 · Logistic Regression Model</div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="pane-csv">
+    <div class="card">
+      <div class="card-label">01 - Upload CSV File</div>
+      <p class="csv-guidance">
+        Required columns: <span class="csv-guidance-strong">calories, carbohydrates, sugar, fat, saturated_fat, sodium, protein</span><br>
+        Optional columns: <span class="csv-guidance-strong">fiber, cholesterol, added_sugar, vitamin_c, omega3, name / food_name</span><br>
+        Missing optional columns are automatically estimated by the model.
+      </p>
+      <div class="csv-drop" id="csv-drop">
+        <div class="csv-drop-icon">📂</div>
+        <div class="csv-drop-title">Drop your CSV here</div>
+        <div>or <span class="csv-drop-browse"
+          onclick="event.stopPropagation();document.getElementById('csv-file-input').click()">browse files</span></div>
+        <div class="csv-drop-note">Accepts .csv files only · All values per 100g</div>
+        <input type="file" id="csv-file-input" accept=".csv">
+      </div>
+      <div id="csv-status" class="csv-status"></div>
+    </div>
+
+    <div id="csv-results-wrap" class="hidden">
+      <div class="card">
+        <div class="card-label">02 - Classification Report</div>
+        <div id="csv-summary" class="csv-summary"></div>
+        <div class="csv-table-wrap">
+          <table class="csv-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Food Name</th>
+                <th>Core Model</th>
+                <th>All-Features Model</th>
+                <th>Confidence (Healthy)</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="csv-table-body"></tbody>
+          </table>
+        </div>
+
+        <div class="export-bar">
+          <button class="btn-export" onclick="exportSummaryCSV()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Summary CSV
+          </button>
+          <button class="btn-export json" onclick="exportFullJSON()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Full JSON (with details)
+          </button>
+          <span class="export-note">
+            CSV = summary table · JSON = all nutrient contributions per food
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal-box">
+    <div class="modal-toolbar">
+      <button class="btn-export single modal-export-btn" id="modal-export-btn" onclick="exportSingleJSON(currentModalIdx)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export This Food (JSON)
+      </button>
+      <button class="modal-close modal-close-inline" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-content" class="modal-content-spacing"></div>
+  </div>
+</div>
+
+<script src="/static/js/index.js"></script>
+</body>
+</html>
