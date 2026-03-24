@@ -4,130 +4,129 @@ import joblib
 import pandas as pd
 import numpy as np
 
-# Load trained models, scalers, and imputer
-data    = joblib.load('trained_model.pkl')
-models  = data['models']
-scalers = data['scalers']
-imputer = data['imputer']
+# Load trained pipelines (imputer + scaler + model bundled together)
+data      = joblib.load('trained_model.pkl')
+pipelines = data['pipelines']   # {'core': Pipeline, 'all': Pipeline}
 
+# ── FIX (Medium): Unified canonical feature schema ───────────────────────────
+# These lists must exactly match trained_model.py and app.py.
+# Old test file had fiber/cholesterol in core and carbohydrates as core,
+# but the actual training used the schema below. Mismatched schemas gave
+# misleading validation results.
 core_features = [
-    "calories", "sugar", "fat", "fiber", "protein",
-    "sodium", "cholesterol", "saturated_fat", "carbohydrates"
+    "calories", "carbohydrates", "sugar", "fat",
+    "saturated_fat", "sodium", "protein",
 ]
 optional_features = [
-    "added_sugar",
-    "vitamin_c",
-    "omega3",
+    "fiber",        # absent/zero in many meat & processed foods
+    "cholesterol",  # absent in all plant-based foods
+    "added_sugar",  # strongest unhealthy signal
+    "vitamin_c",    # strong healthy signal
+    "omega3",       # healthy fat signal
 ]
+all_features = core_features + optional_features
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TEST FOODS
-# All values per 100g. Enter 0 for any unknown optional value.
-# New core field : carbohydrates (g)
-# New optional fields: potassium, magnesium, iron, omega3,
-#                      monounsaturated_fat, zinc, phosphorus,
-#                      vitamin_a, vitamin_b6, vitamin_b12,
-#                      vitamin_e, vitamin_k, choline, niacin
-# Removed: added_sugar, trans_fat (not in training dataset)
+# All values per 100 g. Leave optional values as np.nan if genuinely unknown.
+# Use 0.0 only when the nutrient is confirmed absent (e.g. added_sugar=0 for
+# plain salmon). Do NOT use 0 to mean "I don't know".
 # ─────────────────────────────────────────────────────────────────────────────
 test_foods = [
     # ── Healthy ──────────────────────────────────────────────────────────────
     {"name": "Apple",
-     "calories": 52,  "sugar": 10,  "fat": 0.2,  "fiber": 2.4,  "protein": 0.3,
-     "sodium": 1,     "cholesterol": 0,   "saturated_fat": 0.0,  "carbohydrates": 14,
-     "added_sugar": 0,    "vitamin_c": 4.6,  "omega3": 0.01},
+     "calories": 52,  "carbohydrates": 14, "sugar": 10,  "fat": 0.2,
+     "saturated_fat": 0.0,  "sodium": 1,   "protein": 0.3,
+     "fiber": 2.4,  "cholesterol": 0,    "added_sugar": 0,   "vitamin_c": 4.6,  "omega3": 0.01},
 
     {"name": "Banana",
-     "calories": 89,  "sugar": 12,  "fat": 0.3,  "fiber": 2.6,  "protein": 1.1,
-     "sodium": 1,     "cholesterol": 0,   "saturated_fat": 0.1,  "carbohydrates": 23,
-     "added_sugar": 0,    "vitamin_c": 8.7,  "omega3": 0.03},
+     "calories": 89,  "carbohydrates": 23, "sugar": 12,  "fat": 0.3,
+     "saturated_fat": 0.1,  "sodium": 1,   "protein": 1.1,
+     "fiber": 2.6,  "cholesterol": 0,    "added_sugar": 0,   "vitamin_c": 8.7,  "omega3": 0.03},
 
     {"name": "Brown Rice",
-     "calories": 123, "sugar": 0.3, "fat": 1.0,  "fiber": 1.8,  "protein": 2.6,
-     "sodium": 4,     "cholesterol": 0,   "saturated_fat": 0.2,  "carbohydrates": 26,
-     "added_sugar": 0,    "vitamin_c": 0,    "omega3": 0.03},
+     "calories": 123, "carbohydrates": 26, "sugar": 0.3, "fat": 1.0,
+     "saturated_fat": 0.2,  "sodium": 4,   "protein": 2.6,
+     "fiber": 1.8,  "cholesterol": 0,    "added_sugar": 0,   "vitamin_c": 0,    "omega3": 0.03},
 
     {"name": "Orange Juice",
-     "calories": 45,  "sugar": 9,   "fat": 0.1,  "fiber": 0.2,  "protein": 0.7,
-     "sodium": 1,     "cholesterol": 0,   "saturated_fat": 0.0,  "carbohydrates": 10,
-     "added_sugar": 0,    "vitamin_c": 50,   "omega3": 0.01},
+     "calories": 45,  "carbohydrates": 10, "sugar": 9,   "fat": 0.1,
+     "saturated_fat": 0.0,  "sodium": 1,   "protein": 0.7,
+     "fiber": 0.2,  "cholesterol": 0,    "added_sugar": 0,   "vitamin_c": 50,   "omega3": 0.01},
 
     {"name": "Oatmeal",
-     "calories": 68,  "sugar": 1,   "fat": 1.4,  "fiber": 1.7,  "protein": 2.4,
-     "sodium": 49,    "cholesterol": 0,   "saturated_fat": 0.2,  "carbohydrates": 12,
-     "added_sugar": 0,    "vitamin_c": 0,    "omega3": 0.04},
+     "calories": 68,  "carbohydrates": 12, "sugar": 1,   "fat": 1.4,
+     "saturated_fat": 0.2,  "sodium": 49,  "protein": 2.4,
+     "fiber": 1.7,  "cholesterol": 0,    "added_sugar": 0,   "vitamin_c": 0,    "omega3": 0.04},
 
     {"name": "Grilled Salmon",
-     "calories": 206, "sugar": 0,   "fat": 9.0,  "fiber": 0,    "protein": 30,
-     "sodium": 59,    "cholesterol": 63,  "saturated_fat": 1.4,  "carbohydrates": 0,
-     "added_sugar": 0,    "vitamin_c": 0,    "omega3": 2.2},
+     "calories": 206, "carbohydrates": 0,  "sugar": 0,   "fat": 9.0,
+     "saturated_fat": 1.4,  "sodium": 59,  "protein": 30,
+     "fiber": 0,    "cholesterol": 63,   "added_sugar": 0,   "vitamin_c": 0,    "omega3": 2.2},
 
     {"name": "Lentils",
-     "calories": 116, "sugar": 1.8, "fat": 0.4,  "fiber": 7.9,  "protein": 9.0,
-     "sodium": 2,     "cholesterol": 0,   "saturated_fat": 0.05, "carbohydrates": 20,
-     "added_sugar": 0,    "vitamin_c": 1.5,  "omega3": 0.09},
+     "calories": 116, "carbohydrates": 20, "sugar": 1.8, "fat": 0.4,
+     "saturated_fat": 0.05, "sodium": 2,   "protein": 9.0,
+     "fiber": 7.9,  "cholesterol": 0,    "added_sugar": 0,   "vitamin_c": 1.5,  "omega3": 0.09},
 
     {"name": "Avocado",
-     "calories": 160, "sugar": 0.7, "fat": 15,   "fiber": 6.7,  "protein": 2,
-     "sodium": 7,     "cholesterol": 0,   "saturated_fat": 2.1,  "carbohydrates": 9,
-     "added_sugar": 0,    "vitamin_c": 10,   "omega3": 0.1},
+     "calories": 160, "carbohydrates": 9,  "sugar": 0.7, "fat": 15,
+     "saturated_fat": 2.1,  "sodium": 7,   "protein": 2,
+     "fiber": 6.7,  "cholesterol": 0,    "added_sugar": 0,   "vitamin_c": 10,   "omega3": 0.1},
 
     # ── Borderline ────────────────────────────────────────────────────────────
     {"name": "Whole Milk",
-     "calories": 60,  "sugar": 5,   "fat": 3.3,  "fiber": 0,    "protein": 3.2,
-     "sodium": 43,    "cholesterol": 10,  "saturated_fat": 1.9,  "carbohydrates": 5,
-     "added_sugar": 0,    "vitamin_c": 0,    "omega3": 0.08},
+     "calories": 60,  "carbohydrates": 5,  "sugar": 5,   "fat": 3.3,
+     "saturated_fat": 1.9,  "sodium": 43,  "protein": 3.2,
+     "fiber": 0,    "cholesterol": 10,   "added_sugar": 0,   "vitamin_c": 0,    "omega3": 0.08},
 
     {"name": "Whole Egg",
-     "calories": 155, "sugar": 1.1, "fat": 11,   "fiber": 0,    "protein": 13,
-     "sodium": 124,   "cholesterol": 373, "saturated_fat": 3.3,  "carbohydrates": 1,
-     "added_sugar": 0,    "vitamin_c": 0,    "omega3": 0.1},
+     "calories": 155, "carbohydrates": 1,  "sugar": 1.1, "fat": 11,
+     "saturated_fat": 3.3,  "sodium": 124, "protein": 13,
+     "fiber": 0,    "cholesterol": 373,  "added_sugar": 0,   "vitamin_c": 0,    "omega3": 0.1},
 
     # ── Unhealthy ─────────────────────────────────────────────────────────────
     {"name": "Soda",
-     "calories": 41,  "sugar": 10,  "fat": 0,    "fiber": 0,    "protein": 0,
-     "sodium": 1,     "cholesterol": 0,   "saturated_fat": 0.0,  "carbohydrates": 11,
-     "added_sugar": 10,   "vitamin_c": 0,    "omega3": 0},
+     "calories": 41,  "carbohydrates": 11, "sugar": 10,  "fat": 0,
+     "saturated_fat": 0.0,  "sodium": 1,   "protein": 0,
+     "fiber": 0,    "cholesterol": 0,    "added_sugar": 10,  "vitamin_c": 0,    "omega3": 0},
 
     {"name": "Chocolate Bar",
-     "calories": 230, "sugar": 25,  "fat": 13,   "fiber": 2,    "protein": 3,
-     "sodium": 50,    "cholesterol": 20,  "saturated_fat": 8.0,  "carbohydrates": 60,
-     "added_sugar": 22,   "vitamin_c": 0,    "omega3": 0.05},
+     "calories": 230, "carbohydrates": 60, "sugar": 25,  "fat": 13,
+     "saturated_fat": 8.0,  "sodium": 50,  "protein": 3,
+     "fiber": 2,    "cholesterol": 20,   "added_sugar": 22,  "vitamin_c": 0,    "omega3": 0.05},
 
     {"name": "Fried Chicken",
-     "calories": 246, "sugar": 0,   "fat": 15,   "fiber": 0,    "protein": 20,
-     "sodium": 600,   "cholesterol": 80,  "saturated_fat": 4.0,  "carbohydrates": 8,
-     "added_sugar": 0,    "vitamin_c": 0,    "omega3": 0.1},
+     "calories": 246, "carbohydrates": 8,  "sugar": 0,   "fat": 15,
+     "saturated_fat": 4.0,  "sodium": 600, "protein": 20,
+     "fiber": 0,    "cholesterol": 80,   "added_sugar": 0,   "vitamin_c": 0,    "omega3": 0.1},
 
     {"name": "Cheddar Cheese",
-     "calories": 402, "sugar": 0.5, "fat": 33,   "fiber": 0,    "protein": 25,
-     "sodium": 621,   "cholesterol": 105, "saturated_fat": 21.0, "carbohydrates": 1,
-     "added_sugar": 0,    "vitamin_c": 0,    "omega3": 0.4},
+     "calories": 402, "carbohydrates": 1,  "sugar": 0.5, "fat": 33,
+     "saturated_fat": 21.0, "sodium": 621, "protein": 25,
+     "fiber": 0,    "cholesterol": 105,  "added_sugar": 0,   "vitamin_c": 0,    "omega3": 0.4},
 
     {"name": "French Fries",
-     "calories": 312, "sugar": 0.3, "fat": 15,   "fiber": 3,    "protein": 3.4,
-     "sodium": 210,   "cholesterol": 0,   "saturated_fat": 2.3,  "carbohydrates": 41,
-     "added_sugar": 0,    "vitamin_c": 7,    "omega3": 0.05},
+     "calories": 312, "carbohydrates": 41, "sugar": 0.3, "fat": 15,
+     "saturated_fat": 2.3,  "sodium": 210, "protein": 3.4,
+     "fiber": 3,    "cholesterol": 0,    "added_sugar": 0,   "vitamin_c": 7,    "omega3": 0.05},
 
     {"name": "Doughnut",
-     "calories": 452, "sugar": 27,  "fat": 25,   "fiber": 1.5,  "protein": 5,
-     "sodium": 326,   "cholesterol": 25,  "saturated_fat": 11.0, "carbohydrates": 51,
-     "added_sugar": 18,   "vitamin_c": 0,    "omega3": 0.1},
+     "calories": 452, "carbohydrates": 51, "sugar": 27,  "fat": 25,
+     "saturated_fat": 11.0, "sodium": 326, "protein": 5,
+     "fiber": 1.5,  "cholesterol": 25,   "added_sugar": 18,  "vitamin_c": 0,    "omega3": 0.1},
 ]
 
 df_test = pd.DataFrame(test_foods)
 
 X_core = df_test[core_features]
-X_all  = df_test[core_features + optional_features]
+X_all  = df_test[all_features]
 
-X_core_scaled = scalers['core'].transform(X_core)
-X_all_imputed = imputer.transform(X_all)
-X_all_scaled  = scalers['all'].transform(X_all_imputed)
-
-pred_core = models['core'].predict(X_core_scaled)
-pred_all  = models['all'].predict(X_all_scaled)
-prob_core = models['core'].predict_proba(X_core_scaled)[:, 1]
-prob_all  = models['all'].predict_proba(X_all_scaled)[:, 1]
+# Pipelines handle imputation and scaling internally — no manual transform needed
+prob_core = pipelines['core'].predict_proba(X_core)[:, 1]
+prob_all  = pipelines['all'].predict_proba(X_all)[:, 1]
+pred_core = pipelines['core'].predict(X_core)
+pred_all  = pipelines['all'].predict(X_all)
 
 for i, row in df_test.iterrows():
     core_label = 'Healthy  ' if pred_core[i] else 'Unhealthy'

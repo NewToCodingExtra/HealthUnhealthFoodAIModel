@@ -7,15 +7,17 @@ import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.metrics import (
+    accuracy_score, confusion_matrix, classification_report,
+    roc_auc_score, average_precision_score,
+)
+from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 
-# python -m pip install --upgrade pandas numpy matplotlib scikit-learn 
-# run this on terminal
-
-np.random.seed(42)
-
-#declares core or optional features (can add more optional features later, remove this after final edit (the comment only) dev:Joshua)
+# ── Canonical feature schema (must match app.py and test scripts) ────────────
+# Core (7): always on nutrition label — required for every prediction
+# Optional (5): not present on all foods — imputed if missing
 core_features = [
     "calories",
     "carbohydrates",
@@ -32,109 +34,153 @@ optional_features = [
     "vitamin_c",    # strong healthy signal
     "omega3",       # healthy fat signal — distinguishes salmon/nuts from junk
 ]
+all_features = core_features + optional_features
+
+np.random.seed(42)
 
 df = pd.read_csv('nutrition_data_125k.csv')
- 
+
 print(f"Dataset loaded: {len(df)} rows")
- 
+
 n_healthy   = (df['health_label'] == 'Healthy').sum()
 n_unhealthy = (df['health_label'] == 'Unhealthy').sum()
 print(f"Labels: Healthy={n_healthy} ({100*n_healthy/len(df):.1f}%)  "
       f"Unhealthy={n_unhealthy} ({100*n_unhealthy/len(df):.1f}%)")
- 
+
 encoder = LabelEncoder()
-#convert label into numeric values (unhealthy = 0 and healthy = 1)
 df['health_label'] = encoder.fit_transform(df['health_label'])
- 
 # LabelEncoder sorts alphabetically: Healthy=0, Unhealthy=1
-# Flip so Healthy=1 and Unhealthy=0 (matches prediction display in test files)
+# Flip so Healthy=1 and Unhealthy=0 (consistent with app/test display)
 df['health_label'] = 1 - df['health_label']
 
-#separating core features and optional features
-#only core features
-X_core = df[core_features] #no need to use df.drop() since we are only selecting core features only excluding health_label                        
+X_core = df[core_features]
+X_all  = df[core_features + optional_features]
+y      = df['health_label']
 
-#all features (core + optional)
-X_all = df[core_features + optional_features] #no need to use df.drop() since we are selecting all features including core and optional features excluding health_label                    
-
-#target variable (unhealthy = 0 and healthy = 1)
-y = df['health_label']
-
-scaler_core = StandardScaler()
-scaler_all = StandardScaler()
-
-imputer = SimpleImputer(strategy='median') # using mean imputation to handle any potential missing values in the dataset, since mean is less sensitive to outliers compared to mean imputation, making it a more robust choice for our dataset which may contain extreme values in nutrition facts.
-
-X_core_scaled = scaler_core.fit_transform(X_core) # scale the core features
-X_all_imputed = imputer.fit_transform(X_all) # impute missing values in all features (core + optional)
-X_all_scaled = scaler_all.fit_transform(X_all_imputed) # scale all features (core + optional)
-
-#training model using only the core features first
-
-#splitting the data into training and testing sets (80% training and 20% testing) (only core features   and target variable)
+# ── FIX (High): Split BEFORE fitting any preprocessors ───────────────────────
+# Fitting imputer/scaler on the full dataset before the split leaks test
+# statistics into training, inflating reported accuracy.
+# Correct approach: split first, then fit only on train data.
 X_train_core, X_test_core, y_train_core, y_test_core = train_test_split(
-    X_core_scaled, y, test_size=0.2, random_state=42, stratify=y
+    X_core, y, test_size=0.2, random_state=42, stratify=y
 )
-
-# this line creates a logistic regression model with a maximum of 1000 iterations, this is how we train our model to make predictions based on the data we give it.
-# this model is strong if optional features are not filled, but it is weak if optional features are filled, since it relies on core features to make predictions, so if optional features are filled, it will not perform well.                     
-model_core = LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0) # C is the inverse of regularization strength, smaller values specify stronger regularization, which can help prevent overfitting when using only core features, especially if some core features are noisy or less relevant. Adjusting C allows us to find a good balance between fitting the training data and generalizing to unseen data.
-
-#training the model using only 8000(80% of samples) train data (core features only)
-model_core.fit(X_train_core, y_train_core)
-
-# making predictions using the test data (core features only)
-y_pred_core = model_core.predict(X_test_core)
-
-print("Accuracy using model_core:", accuracy_score(y_test_core, y_pred_core))
-print("Confusion Matrix using model_core:\n", confusion_matrix(y_test_core, y_pred_core))
-print("Classification Report using model_core:\n", classification_report(y_test_core, y_pred_core))
-
-importance = pd.DataFrame(
-    {
-        'Healthy': model_core.coef_[0],        # coefficients for class 1
-        'Unhealthy': -model_core.coef_[0]      # inverse for class 0
-    },
-    index=X_core.columns
-)
-print("Feature importance by class using model_core:\n", importance)
-
-#Training model using all features (core + optional)
-#splitting the data into training and testing sets (80% training and 20% testing) (using all features  and target variable)
 X_train_all, X_test_all, y_train_all, y_test_all = train_test_split(
-    X_all_scaled, y, test_size=0.2, random_state=42, stratify=y
+    X_all, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# this line creates a logistic regression model with a maximum of 1000 iterations, this is how we train our model to make predictions based on the data we give it.
-# this model is strong if optional features are filled, but it is weak if optional features are not filled, since it relies on all features to make predictions, so if optional features are not filled, it will not perform well.
-model_all = LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0) # C is the inverse of regularization strength, smaller values specify stronger regularization, which can help prevent overfitting when using all features, especially if some optional features are noisy or less relevant. Adjusting C allows us to find a good balance between fitting the training data and generalizing to unseen data.
+# ── Build sklearn Pipelines (preprocessor fitted on train only) ───────────────
+# Core pipeline: StandardScaler only (no NaNs expected in core)
+pipe_core = Pipeline([
+    ("imputer", SimpleImputer(strategy='median')),
+    ("scaler",  StandardScaler()),
+    ("clf",     CalibratedClassifierCV(
+                    LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0),
+                    cv=5, method='isotonic')),
+])
 
-#training the model using all features (core + optional)
-model_all.fit(X_train_all, y_train_all)
+# All-features pipeline: median imputation first, then scaling
+pipe_all = Pipeline([
+    ("imputer", SimpleImputer(strategy='median')),
+    ("scaler",  StandardScaler()),
+    ("clf",     CalibratedClassifierCV(
+                    LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0),
+                    cv=5, method='isotonic')),
+])
 
-# making predictions using the test data (all features)
-y_pred_all = model_all.predict(X_test_all)
+# fit_transform on train; transform-only on test (no leakage)
+pipe_core.fit(X_train_core, y_train_core)
+pipe_all.fit(X_train_all,  y_train_all)
 
-print("Accuracy using model_all:", accuracy_score(y_test_all, y_pred_all))
-print("Confusion Matrix using model_all:\n", confusion_matrix(y_test_all, y_pred_all))
-print("Classification Report using model_all:\n", classification_report(y_test_all, y_pred_all))
-importance_all = pd.DataFrame(
-    {
-        'Healthy': model_all.coef_[0],        # coefficients for class 1
-        'Unhealthy': -model_all.coef_[0]      # inverse for class 0
+# ── Evaluation helper ─────────────────────────────────────────────────────────
+def evaluate(name, pipeline, X_test, y_test):
+    y_pred = pipeline.predict(X_test)
+    y_prob = pipeline.predict_proba(X_test)[:, 1]
+
+    print(f"\n{'='*60}")
+    print(f"  {name}")
+    print(f"{'='*60}")
+    print(f"Accuracy  : {accuracy_score(y_test, y_pred):.4f}")
+    print(f"ROC-AUC   : {roc_auc_score(y_test, y_prob):.4f}")
+    print(f"PR-AUC    : {average_precision_score(y_test, y_prob):.4f}")
+    print(f"\nConfusion Matrix:\n{confusion_matrix(y_test, y_pred)}")
+    print(f"\nClassification Report:\n{classification_report(y_test, y_pred)}")
+
+    # ── Per-class F1 from classification report ───────────────────────────────
+    from sklearn.metrics import f1_score
+    f1_healthy   = f1_score(y_test, y_pred, pos_label=1)
+    f1_unhealthy = f1_score(y_test, y_pred, pos_label=0)
+    print(f"F1 (Healthy)   : {f1_healthy:.4f}")
+    print(f"F1 (Unhealthy) : {f1_unhealthy:.4f}")
+
+    # ── Threshold sweep: show precision/recall at common thresholds ───────────
+    print("\nThreshold sweep (healthy class):")
+    print(f"{'Threshold':>10} {'Precision':>10} {'Recall':>8} {'F1':>8}")
+    from sklearn.metrics import precision_score, recall_score
+    for t in np.arange(0.30, 0.75, 0.05):
+        y_at_t = (y_prob >= t).astype(int)
+        if y_at_t.sum() == 0:
+            continue
+        p = precision_score(y_test, y_at_t, zero_division=0)
+        r = recall_score(y_test, y_at_t, zero_division=0)
+        f = 2 * p * r / (p + r) if (p + r) > 0 else 0
+        print(f"{t:>10.2f} {p:>10.4f} {r:>8.4f} {f:>8.4f}")
+
+    return y_prob
+
+y_prob_core = evaluate("Core Model (7 features)", pipe_core, X_test_core, y_test_core)
+y_prob_all  = evaluate("All-Features Model (12 features)", pipe_all, X_test_all, y_test_all)
+
+# ── Feature importance (from inner LogisticRegression) ───────────────────────
+def print_feature_importance(pipe, feature_names, model_name):
+    # CalibratedClassifierCV wraps the base estimator
+    # Access coefficients from the first calibrated estimator's base estimator
+    try:
+        coef = pipe.named_steps['clf'].calibrated_classifiers_[0].estimator.coef_[0]
+    except AttributeError:
+        coef = pipe.named_steps['clf'].estimator.coef_[0]
+    importance = pd.DataFrame(
+        {'Healthy': coef, 'Unhealthy': -coef},
+        index=feature_names,
+    )
+    print(f"\nFeature importance ({model_name}):\n{importance.to_string()}")
+
+print_feature_importance(pipe_core, core_features,    "Core Model")
+print_feature_importance(pipe_all,  all_features, "All-Features Model")
+
+# ── Calibration plots ─────────────────────────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+for ax, y_prob, y_test, name in [
+    (axes[0], y_prob_core, y_test_core, "Core Model"),
+    (axes[1], y_prob_all,  y_test_all,  "All-Features Model"),
+]:
+    frac_pos, mean_pred = calibration_curve(y_test, y_prob, n_bins=10)
+    ax.plot(mean_pred, frac_pos, marker='o', label='Model')
+    ax.plot([0, 1], [0, 1], linestyle='--', label='Perfect')
+    ax.set_title(f"Calibration — {name}")
+    ax.set_xlabel("Mean predicted probability")
+    ax.set_ylabel("Fraction of positives")
+    ax.legend()
+plt.tight_layout()
+plt.savefig('calibration_plots.png', dpi=150)
+plt.close()
+print("\nCalibration plots saved → calibration_plots.png")
+
+# ── Save artefacts ────────────────────────────────────────────────────────────
+# Save the full Pipeline objects so app.py can call .transform() correctly
+# without needing separate scaler/imputer references.
+joblib.dump({
+    'pipelines':        {'core': pipe_core, 'all': pipe_all},
+    # Legacy keys kept for backward-compatibility with existing app.py
+    # (app.py will be updated to use pipelines directly)
+    'models':           {'core': pipe_core, 'all': pipe_all},
+    'scalers':          {
+        'core': pipe_core.named_steps['scaler'],
+        'all':  pipe_all.named_steps['scaler'],
     },
-    index=X_all.columns
-)
+    'imputer':           pipe_all.named_steps['imputer'],
+    'core_features':     core_features,
+    'optional_features': optional_features,
+    'all_features':      all_features,
+}, 'trained_model.pkl')
 
-print("Feature importance by class using model_all:\n", importance_all)
-
-trained_models = {
-    'core': model_core,
-    'all': model_all
-}
-trained_scalers = {
-    'core': scaler_core,   # X_core scaler
-    'all': scaler_all     # X_all scaler, or a separate one if you used separate scalers
-}
-
-joblib.dump({'models': trained_models, 'scalers': trained_scalers, 'imputer': imputer, 'optional_features': optional_features, 'core_features': core_features}, 'trained_model.pkl')
+print("\nModel saved → trained_model.pkl")
