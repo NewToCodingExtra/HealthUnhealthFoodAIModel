@@ -382,11 +382,12 @@ function ringCard(metric, coreCount, allCount, maxCount, colorClass) {
   `;
 }
 
-function classRingCard(title, tpCount, fpCount, maxCount, colorClass) {
-  const pct = maxCount > 0 ? Math.max(((tpCount + fpCount) / maxCount) * 100, 6) : 0;
+function classRingCard(title, tpCount, fpCount) {
+  const total = tpCount + fpCount;
+  const tpPct = total > 0 ? (tpCount / total) * 100 : 0;
   return `
     <div class="ring-card">
-      <div class="ring ${colorClass}" style="--pct:${pct}%;">
+      <div class="ring" style="--tp-pct:${tpPct}%;">
         <div class="ring-inner">${title}</div>
       </div>
       <div class="ring-meta">
@@ -411,14 +412,6 @@ function buildComparisonCharts(summary) {
   const fullHealthy = { tp: full.TP, fp: full.FP };
   const fullUnhealthy = { tp: full.TN, fp: full.FN };
 
-  const maxCount = Math.max(
-    coreHealthy.tp + coreHealthy.fp,
-    coreUnhealthy.tp + coreUnhealthy.fp,
-    fullHealthy.tp + fullHealthy.fp,
-    fullUnhealthy.tp + fullUnhealthy.fp,
-    1
-  );
-
   return `
     <div class="comparison-wrap">
       <div class="comparison-head">
@@ -428,10 +421,10 @@ function buildComparisonCharts(summary) {
         </div>
       </div>
       <div class="ring-grid">
-        ${classRingCard('Core Healthy', coreHealthy.tp, coreHealthy.fp, maxCount, 'ring-green')}
-        ${classRingCard('Core Unhealthy', coreUnhealthy.tp, coreUnhealthy.fp, maxCount, 'ring-red')}
-        ${classRingCard('Full Healthy', fullHealthy.tp, fullHealthy.fp, maxCount, 'ring-green')}
-        ${classRingCard('Full Unhealthy', fullUnhealthy.tp, fullUnhealthy.fp, maxCount, 'ring-red')}
+        ${classRingCard('Core Healthy', coreHealthy.tp, coreHealthy.fp)}
+        ${classRingCard('Core Unhealthy', coreUnhealthy.tp, coreUnhealthy.fp)}
+        ${classRingCard('Full Healthy', fullHealthy.tp, fullHealthy.fp)}
+        ${classRingCard('Full Unhealthy', fullUnhealthy.tp, fullUnhealthy.fp)}
       </div>
     </div>
   `;
