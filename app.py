@@ -12,22 +12,51 @@ data    = joblib.load('trained_model.pkl')
 models  = data['models']
 scalers = data['scalers']
 imputer = data['imputer']
+# Features that were log1p-transformed during training — same must be applied at inference.
+log_transformed_features = data.get('log_transformed_features', [])
+# Engineered features computed from core macros at prediction time.
+engineered_features      = data.get('engineered_features', {})
+# Engineered features computed from core macros at prediction time.
+engineered_features      = data.get('engineered_features', {})
 
-# ── Feature definitions (must match trained_model.py) ────────────────────────
-# Core (7): on every nutrition label — always required
-# Optional (5): not present in all foods — imputed if missing
-core_features = [
-    "calories", "carbohydrates", "sugar", "fat",
-    "saturated_fat", "sodium", "protein",
-]
-optional_features = [
-    "fiber",        # absent/zero in many meat & processed foods
-    "cholesterol",  # absent in plant-based foods
-    "added_sugar",  # strongest unhealthy signal
-    "vitamin_c",    # strong healthy signal
-    "omega3",       # healthy fat signal
-]
-all_features = core_features + optional_features
+# ── Feature definitions (loaded from pkl to stay in sync with trained_model.py) ─
+core_features     = data['core_features']      # includes fried_index, fried_starchy
+optional_features = data['optional_features']
+all_features      = core_features + optional_features
+
+# Raw nutrient inputs from the user (before engineering).
+# These are the 7 base macros the user types in.
+BASE_NUTRIENTS = ["calories","carbohydrates","sugar","fat","saturated_fat","sodium","protein"]
+
+# ── Engineered feature computation ───────────────────────────────────────────
+# fried_index and fried_starchy are computed from carbohydrates + fat.
+# They are always calculable (no imputation needed) and must be added
+# to every feature vector before scaling.
+def compute_engineered(nutrient_vals):
+    """
+    Given a dict of raw nutrient values, compute and return engineered features.
+    nutrient_vals: {feature_name: float}
+    Returns the same dict with engineered features added in-place.
+    """
+    carbs = nutrient_vals.get('carbohydrates', 0.0) or 0.0
+    fat   = nutrient_vals.get('fat', 0.0) or 0.0
+    nutrient_vals['fried_index']   = float(np.log1p((carbs * fat) / 100))
+    nutrient_vals['fried_starchy'] = float(carbs > 35 and fat > 8)
+    return nutrient_vals
+
+# ── Log-transform helper ──────────────────────────────────────────────────────
+def apply_log_transforms(all_vals_list):
+    """Apply log1p to any feature flagged in log_transformed_features.
+    NaN values are first replaced with 0 for log-transformed features
+    (log1p(0) = 0 = neutral), then the rest of the NaN values are left
+    for the imputer to fill with the training median."""
+    result = list(all_vals_list)
+    for feat in log_transformed_features:
+        if feat in all_features:
+            idx = all_features.index(feat)
+            val = result[idx]
+            result[idx] = np.log1p(0.0 if (val is None or (isinstance(val, float) and np.isnan(val))) else val)
+    return result
 
 # ── HTML key → model feature name (all match directly now) ───────────────────
 HTML_TO_MODEL = {
@@ -107,20 +136,26 @@ def predict():
         # Core features must always have a real value.
         # null/None means the user left it blank — treat as 0 with a warning.
         # 0 is valid (e.g. cholesterol=0 for plant-based foods).
-        core_vals = []
-        blank_cores = []
-        for feat in core_features:
+
+        # First collect the raw base nutrients from the user
+        raw_nutrients = {}
+        blank_cores   = []
+        for feat in BASE_NUTRIENTS:
             html_key = next((k for k, v in HTML_TO_MODEL.items() if v == feat), None)
             val = nutrients.get(html_key, None) if html_key else None
             if val is None:
-                core_vals.append(0.0)   # fallback: treat blank as 0
+                raw_nutrients[feat] = 0.0
                 blank_cores.append(feat)
             else:
-                core_vals.append(float(val))
+                raw_nutrients[feat] = float(val)
+
+        # Compute engineered features (fried_index, fried_starchy) from raw macros
+        compute_engineered(raw_nutrients)
+
+        # Build the core vector in the order core_features expects
+        core_vals = [raw_nutrients.get(f, 0.0) for f in core_features]
 
         # ── Build all-feature vector (NaN for unknown optionals) ──────────────
-        # null from JS = user didn't enter value = truly unknown → imputer estimates
-        # 0 from JS    = user entered zero       = genuinely none (e.g. no added sugar)
         all_vals = core_vals.copy()
         for feat in optional_features:
             html_key = next((k for k, v in HTML_TO_MODEL.items() if v == feat), None)
@@ -129,6 +164,9 @@ def predict():
                 all_vals.append(np.nan if val is None else float(val))
             else:
                 all_vals.append(np.nan)   # not in payload at all → imputer estimates
+
+        # Apply log1p to any features that were log-transformed during training.
+        all_vals = apply_log_transforms(all_vals)
 
         # ── Scale & predict ───────────────────────────────────────────────────
         X_core_df = pd.DataFrame([core_vals], columns=core_features)
@@ -230,42 +268,39 @@ def predict_csv():
             food_name = str(row[name_col]) if name_col else f"Food #{idx+1}"
 
             # ── Core feature vector ───────────────────────────────────────────
-            # Core features must exist — missing or NaN cells default to 0
-            # (0 is a valid value e.g. sugar=0 for plain meat)
-            core_vals = []
+            # Collect base nutrients from CSV row, then compute engineered features.
+            raw_row   = {}
             blank_cores = []
-            for feat in core_features:
+            for feat in BASE_NUTRIENTS:
                 if feat not in df.columns:
-                    # Column missing from CSV entirely
-                    core_vals.append(0.0)
+                    raw_row[feat] = 0.0
                     blank_cores.append(feat)
                 else:
                     val = row[feat]
                     if pd.isna(val):
-                        core_vals.append(0.0)
+                        raw_row[feat] = 0.0
                         blank_cores.append(feat)
                     else:
-                        core_vals.append(float(val))
+                        raw_row[feat] = float(val)
+
+            # Compute fried_index and fried_starchy from raw carbs + fat
+            compute_engineered(raw_row)
+            core_vals = [raw_row.get(f, 0.0) for f in core_features]
 
             # ── All-feature vector ────────────────────────────────────────────
-            # Optional features:
-            #   column missing from CSV → np.nan → imputer fills with training median
-            #   column exists, cell is NaN/blank → np.nan → imputer fills
-            #   column exists, cell = 0 → 0.0 → genuine zero, no imputation
-            #   column exists, cell has value → use as-is
             all_vals = core_vals.copy()
             for feat in optional_features:
                 if feat not in df.columns:
-                    # Whole column absent — imputer will estimate
                     all_vals.append(np.nan)
                 else:
                     val = row[feat]
                     if pd.isna(val):
-                        # Blank cell — imputer will estimate
                         all_vals.append(np.nan)
                     else:
-                        # Actual value (including genuine 0)
                         all_vals.append(float(val))
+
+            # Apply same log1p transforms used during training.
+            all_vals = apply_log_transforms(all_vals)
 
             X_core_df = pd.DataFrame([core_vals], columns=core_features)
             X_all_df  = pd.DataFrame([all_vals],  columns=all_features)

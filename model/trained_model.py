@@ -24,6 +24,8 @@ core_features = [
     "saturated_fat",
     "sodium",
     "protein",
+    "fried_index",    # log1p(carbs × fat / 100) — continuous fried/starchy signal
+    "fried_starchy",  # binary flag: carbs>35 AND fat>8 — hard fried-food trigger
 ]
 optional_features = [
     "fiber",        # absent/zero in many meat & processed foods
@@ -34,7 +36,47 @@ optional_features = [
 ]
 
 df = pd.read_csv('nutrition_data_125k.csv')
- 
+
+# ── Log-transform added_sugar ─────────────────────────────────────────────────
+# added_sugar has a skewed distribution: most foods have 0g, a few have very
+# high values (30-50g). With a linear scale the StandardScaler places 0 at
+# the extreme negative end, so the model learns "added_sugar=0 → very Healthy"
+# giving a +4.25 boost to any food with no added sugar (including french fries).
+#
+# log1p(x) = log(x + 1) fixes this:
+#   - log1p(0)  = 0.00  → genuinely zero foods stay at zero
+#   - log1p(5)  = 1.79  → moderate added sugar, reasonable penalty
+#   - log1p(10) = 2.40  → high added sugar, stronger penalty
+#   - log1p(50) = 3.93  → extreme added sugar, strongest penalty
+#
+# After StandardScaling, zero now sits near the CENTER of the distribution
+# instead of the extreme tail → neutral contribution instead of a healthy boost.
+# All other features are untouched.
+df['added_sugar'] = np.log1p(df['added_sugar'])
+
+# ── Engineered interaction features ──────────────────────────────────────────
+# Logistic regression scores each nutrient independently and cannot detect
+# the COMBINATION of high carbohydrates + high fat that characterises fried /
+# starchy foods. French fries (carbs=41, fat=15) pass as "Healthy" because
+# each feature individually looks moderate. We add two interaction features
+# that explicitly capture the fried-food pattern:
+#
+#   fried_index   = log1p(carbohydrates × fat / 100)
+#     A continuous measure of "starchy-and-fatty" density.
+#     log1p compresses the scale so extreme values don't dominate.
+#     French fries: log1p(41.4×14.7/100) = log1p(6.09) = 1.96  ← high
+#     Grilled salmon: log1p(0×9/100)     = log1p(0)    = 0.00  ← zero
+#     White rice: log1p(28.2×0.3/100)    = log1p(0.08) = 0.08  ← near-zero
+#
+#   fried_starchy = 1 if carbohydrates > 35 AND fat > 8, else 0
+#     A binary flag that fires exactly when the fried-starchy rule triggers.
+#     This gives the model a hard signal, independent of the continuous index.
+#
+# Both features are computed from core macros (always available), so they
+# are added to core_features and need no imputation.
+df['fried_index']   = np.log1p((df['carbohydrates'] * df['fat']) / 100)
+df['fried_starchy'] = ((df['carbohydrates'] > 35) & (df['fat'] > 8)).astype(float)
+
 print(f"Dataset loaded: {len(df)} rows")
  
 n_healthy   = (df['health_label'] == 'Healthy').sum()
@@ -137,4 +179,15 @@ trained_scalers = {
     'all': scaler_all     # X_all scaler, or a separate one if you used separate scalers
 }
 
-joblib.dump({'models': trained_models, 'scalers': trained_scalers, 'imputer': imputer, 'optional_features': optional_features, 'core_features': core_features}, 'trained_model.pkl')
+joblib.dump({
+    'models':                    trained_models,
+    'scalers':                   trained_scalers,
+    'imputer':                   imputer,
+    'optional_features':         optional_features,
+    'core_features':             core_features,
+    'log_transformed_features':  ['added_sugar'],
+    'engineered_features': {
+        'fried_index':   'log1p(carbohydrates * fat / 100)',
+        'fried_starchy': '1 if carbohydrates > 35 and fat > 8 else 0',
+    },
+}, 'trained_model.pkl')
