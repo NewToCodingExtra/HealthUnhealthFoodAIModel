@@ -1,11 +1,13 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import pathlib
+import sys
 
 import joblib
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, FunctionTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score, confusion_matrix, classification_report,
@@ -15,26 +17,26 @@ from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 
-# ── Canonical feature schema (must match app.py and test scripts) ────────────
-# Core (7): always on nutrition label — required for every prediction
-# Optional (5): not present on all foods — imputed if missing
-core_features = [
-    "calories",
-    "carbohydrates",
-    "sugar",
-    "fat",
-    "saturated_fat",
-    "sodium",
-    "protein",
-]
-optional_features = [
-    "fiber",        # absent/zero in many meat & processed foods
-    "cholesterol",  # absent in all plant-based foods
-    "added_sugar",  # strongest unhealthy signal — not always on labels
-    "vitamin_c",    # strong healthy signal
-    "omega3",       # healthy fat signal — distinguishes salmon/nuts from junk
-]
-all_features = core_features + optional_features
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from model.transforms import (
+    BASE_CORE_FEATURES,
+    DERIVED_FEATURES,
+    OPTIONAL_FEATURES,
+    CORE_FEATURES,
+    ALL_FEATURES,
+    add_derived_features,
+    log1p_added_sugar,
+)
+
+base_core_features = BASE_CORE_FEATURES
+derived_features = DERIVED_FEATURES
+optional_features = OPTIONAL_FEATURES
+core_features = CORE_FEATURES
+all_features = ALL_FEATURES
+
 
 np.random.seed(42)
 
@@ -53,8 +55,9 @@ df['health_label'] = encoder.fit_transform(df['health_label'])
 # Flip so Healthy=1 and Unhealthy=0 (consistent with app/test display)
 df['health_label'] = 1 - df['health_label']
 
-X_core = df[core_features]
-X_all  = df[core_features + optional_features]
+df_with_derived = add_derived_features(df)
+X_core = df_with_derived[core_features]
+X_all  = df_with_derived[all_features]
 y      = df['health_label']
 
 # ── FIX (High): Split BEFORE fitting any preprocessors ───────────────────────
@@ -74,16 +77,17 @@ pipe_core = Pipeline([
     ("imputer", SimpleImputer(strategy='median')),
     ("scaler",  StandardScaler()),
     ("clf",     CalibratedClassifierCV(
-                    LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0),
+                    LogisticRegression(max_iter=1000, class_weight='balanced', C=0.3),
                     cv=5, method='isotonic')),
 ])
 
 # All-features pipeline: median imputation first, then scaling
 pipe_all = Pipeline([
     ("imputer", SimpleImputer(strategy='median')),
+    ("log1p_added_sugar", FunctionTransformer(log1p_added_sugar, validate=False)),
     ("scaler",  StandardScaler()),
     ("clf",     CalibratedClassifierCV(
-                    LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0),
+                    LogisticRegression(max_iter=1000, class_weight='balanced', C=0.1),
                     cv=5, method='isotonic')),
 ])
 
@@ -127,8 +131,8 @@ def evaluate(name, pipeline, X_test, y_test):
 
     return y_prob
 
-y_prob_core = evaluate("Core Model (7 features)", pipe_core, X_test_core, y_test_core)
-y_prob_all  = evaluate("All-Features Model (12 features)", pipe_all, X_test_all, y_test_all)
+y_prob_core = evaluate("Core Model (9 features)", pipe_core, X_test_core, y_test_core)
+y_prob_all  = evaluate("All-Features Model (14 features)", pipe_all, X_test_all, y_test_all)
 
 # ── Feature importance (from inner LogisticRegression) ───────────────────────
 def print_feature_importance(pipe, feature_names, model_name):
@@ -144,8 +148,8 @@ def print_feature_importance(pipe, feature_names, model_name):
     )
     print(f"\nFeature importance ({model_name}):\n{importance.to_string()}")
 
-print_feature_importance(pipe_core, core_features,    "Core Model")
-print_feature_importance(pipe_all,  all_features, "All-Features Model")
+print_feature_importance(pipe_core, core_features, "Core Model")
+print_feature_importance(pipe_all, all_features, "All-Features Model")
 
 # ── Calibration plots ─────────────────────────────────────────────────────────
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -163,7 +167,7 @@ for ax, y_prob, y_test, name in [
 plt.tight_layout()
 plt.savefig('calibration_plots.png', dpi=150)
 plt.close()
-print("\nCalibration plots saved → calibration_plots.png")
+print("\nCalibration plots saved -> calibration_plots.png")
 
 # ── Save artefacts ────────────────────────────────────────────────────────────
 # Save the full Pipeline objects so app.py can call .transform() correctly
@@ -179,8 +183,10 @@ joblib.dump({
     },
     'imputer':           pipe_all.named_steps['imputer'],
     'core_features':     core_features,
+    'base_core_features': base_core_features,
+    'derived_features':   derived_features,
     'optional_features': optional_features,
     'all_features':      all_features,
 }, 'trained_model.pkl')
 
-print("\nModel saved → trained_model.pkl")
+print("\nModel saved -> trained_model.pkl")

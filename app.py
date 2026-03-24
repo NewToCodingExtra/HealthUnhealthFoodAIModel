@@ -3,6 +3,16 @@ from flask_cors import CORS
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.metrics import brier_score_loss
+from model.transforms import (
+    BASE_CORE_FEATURES,
+    DERIVED_FEATURES,
+    OPTIONAL_FEATURES,
+    CORE_FEATURES,
+    ALL_FEATURES,
+    compute_derived_features,
+    log1p_added_sugar,
+)
 
 app = Flask(__name__)
 CORS(app)
@@ -15,23 +25,15 @@ scalers   = data['scalers']
 imputer   = data['imputer']
 
 # ── Canonical feature schema (must match trained_model.py and test scripts) ───
-# Core (7): always on nutrition label — required for every prediction
-# Optional (5): not present on all foods — imputed if missing
-core_features = [
-    "calories", "carbohydrates", "sugar", "fat",
-    "saturated_fat", "sodium", "protein",
-]
-optional_features = [
-    "fiber",        # absent/zero in many meat & processed foods
-    "cholesterol",  # absent in plant-based foods
-    "added_sugar",  # strongest unhealthy signal
-    "vitamin_c",    # strong healthy signal
-    "omega3",       # healthy fat signal
-]
-all_features = core_features + optional_features
+# Base core (7): always on nutrition label — required for every prediction
+base_core_features = BASE_CORE_FEATURES
+derived_features = DERIVED_FEATURES
+optional_features = OPTIONAL_FEATURES
+core_features = CORE_FEATURES
+all_features = ALL_FEATURES
 
 # ── HTML key → model feature name ─────────────────────────────────────────────
-HTML_TO_MODEL = {feat: feat for feat in all_features}   # all keys match directly
+HTML_TO_MODEL = {feat: feat for feat in base_core_features + optional_features}
 
 
 def build_feature_contributions(pipeline, X_df, feature_names, raw_values):
@@ -46,18 +48,15 @@ def build_feature_contributions(pipeline, X_df, feature_names, raw_values):
       > 0 → pushing toward Healthy
       < 0 → pushing toward Unhealthy
     """
-    # Extract scaler from pipeline to get the transformed vector
-    steps = dict(pipeline.steps)
-    X_scaled = X_df.copy()
-    if 'imputer' in steps:
-        X_scaled = steps['imputer'].transform(X_scaled)
-    X_scaled = steps['scaler'].transform(X_scaled)
+    # Apply every preprocessing step in pipeline order (except final classifier),
+    # so contributions stay correct even if we add transforms like log1p.
+    X_scaled = pipeline[:-1].transform(X_df)
 
     # Extract coefficients from CalibratedClassifierCV → first calibrator
     try:
-        coef = steps['clf'].calibrated_classifiers_[0].estimator.coef_[0]
+        coef = pipeline.named_steps['clf'].calibrated_classifiers_[0].estimator.coef_[0]
     except AttributeError:
-        coef = steps['clf'].estimator.coef_[0]
+        coef = pipeline.named_steps['clf'].estimator.coef_[0]
 
     contrib = coef * X_scaled[0]
     ranked  = sorted(
@@ -118,6 +117,84 @@ def get_confusion_bucket(expected_label, predicted_label):
     return "FN"
 
 
+def safe_total_accuracy(tp, fp):
+    """
+    Custom total-accuracy metric requested by UI:
+    ((TP - FP) / TP) * 100
+    """
+    if tp <= 0:
+        return None
+    return round(((tp - fp) / tp) * 100, 2)
+
+
+def compute_calibration_metrics(y_true, y_prob, bins=10):
+    """
+    Return lightweight calibration summary for UI reporting.
+    """
+    if len(y_true) == 0:
+        return {
+            "brier_score": None,
+            "ece_percent": None,
+            "avg_confidence_percent": None,
+            "avg_observed_positive_percent": None,
+            "sample_count": 0,
+            "curve_points": [],
+        }
+
+    y_true_arr = np.array(y_true, dtype=float)
+    y_prob_arr = np.array(y_prob, dtype=float)
+    brier = float(brier_score_loss(y_true_arr, y_prob_arr))
+
+    bin_edges = np.linspace(0.0, 1.0, bins + 1)
+    ece = 0.0
+    total = len(y_true_arr)
+    observed = []
+    confs = []
+    curve_points = []
+
+    for i in range(bins):
+        lo = bin_edges[i]
+        hi = bin_edges[i + 1]
+        # Include right edge on final bin only.
+        if i == bins - 1:
+            mask = (y_prob_arr >= lo) & (y_prob_arr <= hi)
+        else:
+            mask = (y_prob_arr >= lo) & (y_prob_arr < hi)
+
+        if not np.any(mask):
+            continue
+
+        bin_true = y_true_arr[mask]
+        bin_prob = y_prob_arr[mask]
+        acc = float(np.mean(bin_true))
+        conf = float(np.mean(bin_prob))
+        weight = float(np.sum(mask)) / total
+        ece += abs(acc - conf) * weight
+        observed.append(acc)
+        confs.append(conf)
+        curve_points.append({
+            "mean_predicted_percent": round(conf * 100, 2),
+            "actual_positive_percent": round(acc * 100, 2),
+            "count": int(np.sum(mask)),
+        })
+
+    avg_conf = float(np.mean(y_prob_arr))
+    avg_obs = float(np.mean(y_true_arr))
+    if observed:
+        avg_obs = float(np.mean(observed))
+    if confs:
+        avg_conf = float(np.mean(confs))
+
+    return {
+        "brier_score": round(brier, 6),
+        "ece_percent": round(ece * 100, 2),
+        "avg_confidence_percent": round(avg_conf * 100, 2),
+        "avg_observed_positive_percent": round(avg_obs * 100, 2),
+        "sample_count": int(total),
+        "curve_points": curve_points,
+    }
+
+
 # ── Verdict thresholds ────────────────────────────────────────────────────────
 # These should be tuned from a validation precision/recall sweep
 # (see threshold sweep output printed by trained_model.py).
@@ -153,7 +230,7 @@ def predict():
         # like water to the model). Core fields must be provided.
         missing_cores = []
         core_vals = []
-        for feat in core_features:
+        for feat in base_core_features:
             val = nutrients.get(HTML_TO_MODEL[feat], None)
             if val is None:
                 missing_cores.append(feat)
@@ -173,24 +250,29 @@ def predict():
         # ── Build all-feature vector (NaN for unknown optionals) ──────────────
         # null from JS = user didn't enter value = truly unknown → imputer estimates
         # 0 from JS    = user entered zero       = genuinely none (e.g. no added sugar)
-        all_vals = core_vals.copy()
+        carbohydrates = core_vals[base_core_features.index("carbohydrates")]
+        fat = core_vals[base_core_features.index("fat")]
+        fried_index, fried_starchy = compute_derived_features(carbohydrates, fat)
+        core_model_vals = core_vals + [fried_index, fried_starchy]
+
+        all_vals = core_model_vals.copy()
         for feat in optional_features:
             val = nutrients.get(HTML_TO_MODEL[feat], None)
             all_vals.append(np.nan if val is None else float(val))
 
         # ── Predict via full Pipelines ─────────────────────────────────────────
-            X_core_df = pd.DataFrame([core_vals], columns=core_features)
-            X_all_df  = pd.DataFrame([all_vals],  columns=all_features)
+        X_core_df = pd.DataFrame([core_model_vals], columns=core_features)
+        X_all_df  = pd.DataFrame([all_vals],  columns=all_features)
 
-            # Fill missing core values with training median (from the all-features imputer)
-            core_medians = dict(zip(all_features, imputer.statistics_))
-            X_core_df = X_core_df.fillna({f: core_medians[f] for f in core_features})
+        # Fill missing core values with training median (from the all-features imputer)
+        core_medians = dict(zip(all_features, imputer.statistics_))
+        X_core_df = X_core_df.fillna({f: core_medians[f] for f in core_features})
 
-            prob_core = pipelines['core'].predict_proba(X_core_df)[0]
-            prob_all  = pipelines['all'].predict_proba(X_all_df)[0]
+        prob_core = pipelines['core'].predict_proba(X_core_df)[0]
+        prob_all  = pipelines['all'].predict_proba(X_all_df)[0]
 
         core_label, core_is_healthy, core_borderline = get_verdict(float(prob_core[1]))
-        all_label,  all_is_healthy,  all_borderline  = get_verdict(float(prob_all[1]))
+        all_label, all_is_healthy, all_borderline = get_verdict(float(prob_all[1]))
 
         models_disagree = (
             core_label != all_label
@@ -207,7 +289,7 @@ def predict():
                 "prob_unhealthy": round(float(prob_core[0]) * 100, 1),
                 "features":       build_feature_contributions(
                                       pipelines['core'], X_core_df,
-                                      core_features, core_vals),
+                                      core_features, core_model_vals),
             },
             "all_model": {
                 "label":          all_label,
@@ -240,6 +322,8 @@ def predict():
 def debug():
     return jsonify({
         "core_features":        core_features,
+        "base_core_features":   base_core_features,
+        "derived_features":     derived_features,
         "optional_features":    optional_features,
         "core_model_n_features":  pipelines['core'].n_features_in_,
         "all_model_n_features":   pipelines['all'].n_features_in_,
@@ -277,6 +361,9 @@ def predict_csv():
             "skipped_core":    0,   # rows where core_label was Borderline/unknown
             "skipped_all":     0,   # rows where all_label  was Borderline/unknown
         }
+        y_true_binary = []   # Healthy=1, Unhealthy=0
+        core_probs = []
+        all_probs = []
 
         for idx, row in df.iterrows():
             food_name = str(row[name_col]) if name_col else f"Food #{idx+1}"
@@ -287,7 +374,7 @@ def predict_csv():
             # impute missing cores via the training median and flag the row.
             core_vals  = []
             blank_cores = []
-            for feat in core_features:
+            for feat in base_core_features:
                 if feat not in df.columns or pd.isna(row[feat]):
                     core_vals.append(np.nan)   # will be caught below
                     blank_cores.append(feat)
@@ -296,14 +383,19 @@ def predict_csv():
 
             # If any core is missing we can still run prediction with NaN,
             # but we record a warning on the row so the caller knows.
-            all_vals = core_vals.copy()
+            carbs = core_vals[base_core_features.index("carbohydrates")]
+            fat = core_vals[base_core_features.index("fat")]
+            fried_index, fried_starchy = compute_derived_features(carbs, fat)
+            core_model_vals = core_vals + [fried_index, fried_starchy]
+
+            all_vals = core_model_vals.copy()
             for feat in optional_features:
                 if feat not in df.columns or pd.isna(row.get(feat, np.nan)):
                     all_vals.append(np.nan)
                 else:
                     all_vals.append(float(row[feat]))
 
-            X_core_df = pd.DataFrame([core_vals], columns=core_features)
+            X_core_df = pd.DataFrame([core_model_vals], columns=core_features)
             X_all_df  = pd.DataFrame([all_vals],  columns=all_features)
 
             # Pipelines handle imputation internally
@@ -311,7 +403,7 @@ def predict_csv():
             prob_all  = pipelines['all'].predict_proba(X_all_df)[0]
 
             core_label, core_is_healthy, core_borderline = get_verdict(float(prob_core[1]))
-            all_label,  all_is_healthy,  all_borderline  = get_verdict(float(prob_all[1]))
+            all_label, all_is_healthy, all_borderline = get_verdict(float(prob_all[1]))
 
             expected_label = normalize_expected_label(row[expected_col]) if expected_col else None
             core_match = expected_label == core_label if expected_label else None
@@ -319,6 +411,9 @@ def predict_csv():
 
             if expected_label:
                 confusion["comparable_rows"] += 1
+                y_true_binary.append(1 if expected_label == "Healthy" else 0)
+                core_probs.append(float(prob_core[1]))
+                all_probs.append(float(prob_all[1]))
 
                 core_bucket = get_confusion_bucket(expected_label, core_label)
                 if core_bucket:
@@ -343,7 +438,7 @@ def predict_csv():
                     "prob_unhealthy": round(float(prob_core[0]) * 100, 1),
                     "features":       build_feature_contributions(
                                           pipelines['core'], X_core_df,
-                                          core_features, core_vals),
+                                          core_features, core_model_vals),
                 },
                 "all_model": {
                     "label":          all_label,
@@ -365,6 +460,18 @@ def predict_csv():
                     f"{', '.join(blank_cores)}"
                 ) if blank_cores else None,
             })
+
+        if comparison_available:
+            core_tp = confusion["core_model"]["TP"]
+            core_fp = confusion["core_model"]["FP"]
+            all_tp = confusion["all_model"]["TP"]
+            all_fp = confusion["all_model"]["FP"]
+            confusion["core_model"]["total_accuracy_percent"] = safe_total_accuracy(core_tp, core_fp)
+            confusion["all_model"]["total_accuracy_percent"] = safe_total_accuracy(all_tp, all_fp)
+            confusion["calibration_report"] = {
+                "core_model": compute_calibration_metrics(y_true_binary, core_probs),
+                "all_model": compute_calibration_metrics(y_true_binary, all_probs),
+            }
 
         return jsonify({
             "results":              results,

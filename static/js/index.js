@@ -398,11 +398,75 @@ function classRingCard(title, tpCount, fpCount) {
   `;
 }
 
+function combinedCalibrationChart(corePoints, fullPoints) {
+  const width = 860;
+  const height = 360;
+  const padLeft = 70;
+  const padRight = 20;
+  const padTop = 20;
+  const padBottom = 58;
+  const innerW = width - padLeft - padRight;
+  const innerH = height - padTop - padBottom;
+
+  const sanitize = points => (Array.isArray(points) ? points : [])
+    .filter(p => p && typeof p.mean_predicted_percent === 'number' && typeof p.actual_positive_percent === 'number')
+    .sort((a, b) => a.mean_predicted_percent - b.mean_predicted_percent);
+
+  const core = sanitize(corePoints);
+  const full = sanitize(fullPoints);
+  const hasAny = core.length || full.length;
+
+  if (!hasAny) {
+    return `<div class="cal-chart-empty">No calibration points available.</div>`;
+  }
+
+  const toX = v => padLeft + (Math.max(0, Math.min(100, v)) / 100) * innerW;
+  const toY = v => padTop + (1 - (Math.max(0, Math.min(100, v)) / 100)) * innerH;
+  const pathFor = points => points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${toX(p.mean_predicted_percent)} ${toY(p.actual_positive_percent)}`).join(' ');
+  const ticks = [0, 20, 40, 60, 80, 100];
+
+  return `
+    <svg class="cal-chart-svg-wide" viewBox="0 0 ${width} ${height}" role="img" aria-label="Calibration reliability chart">
+      ${ticks.map(t => `<line x1="${toX(t)}" y1="${toY(0)}" x2="${toX(t)}" y2="${toY(100)}" class="cal-grid"></line>`).join('')}
+      ${ticks.map(t => `<line x1="${toX(0)}" y1="${toY(t)}" x2="${toX(100)}" y2="${toY(t)}" class="cal-grid"></line>`).join('')}
+
+      <line x1="${toX(0)}" y1="${toY(0)}" x2="${toX(100)}" y2="${toY(100)}" class="cal-perfect"></line>
+      ${core.length ? `<path d="${pathFor(core)}" class="cal-model-line core"></path>` : ''}
+      ${full.length ? `<path d="${pathFor(full)}" class="cal-model-line full"></path>` : ''}
+
+      ${core.map(p => `
+        <circle cx="${toX(p.mean_predicted_percent)}" cy="${toY(p.actual_positive_percent)}" r="4" class="cal-point core">
+          <title>Core: predicted ${p.mean_predicted_percent}% · actual ${p.actual_positive_percent}% · n=${p.count || 0}</title>
+        </circle>
+      `).join('')}
+      ${full.map(p => `
+        <circle cx="${toX(p.mean_predicted_percent)}" cy="${toY(p.actual_positive_percent)}" r="4" class="cal-point full">
+          <title>All: predicted ${p.mean_predicted_percent}% · actual ${p.actual_positive_percent}% · n=${p.count || 0}</title>
+        </circle>
+      `).join('')}
+
+      <line x1="${toX(0)}" y1="${toY(0)}" x2="${toX(100)}" y2="${toY(0)}" class="cal-axis"></line>
+      <line x1="${toX(0)}" y1="${toY(0)}" x2="${toX(0)}" y2="${toY(100)}" class="cal-axis"></line>
+
+      ${ticks.map(t => `<text x="${toX(t)}" y="${toY(0) + 20}" class="cal-tick" text-anchor="middle">${(t / 100).toFixed(1)}</text>`).join('')}
+      ${ticks.map(t => `<text x="${toX(0) - 14}" y="${toY(t) + 4}" class="cal-tick" text-anchor="end">${(t / 100).toFixed(1)}</text>`).join('')}
+
+      <text x="${(toX(0) + toX(100)) / 2}" y="${height - 18}" class="cal-axis-label" text-anchor="middle">Mean predicted P(Healthy)</text>
+      <text x="20" y="${(toY(0) + toY(100)) / 2}" transform="rotate(-90 20 ${(toY(0) + toY(100)) / 2})" class="cal-axis-label" text-anchor="middle">Fraction Healthy (observed)</text>
+    </svg>
+  `;
+}
+
 function buildComparisonCharts(summary) {
   if (!summary) return '';
 
   const core = summary.core_model || { TP: 0, TN: 0, FP: 0, FN: 0 };
   const full = summary.all_model || { TP: 0, TN: 0, FP: 0, FN: 0 };
+  const calib = summary.calibration_report || {};
+  const coreCal = calib.core_model || {};
+  const fullCal = calib.all_model || {};
+  const coreTotalAcc = core.total_accuracy_percent;
+  const fullTotalAcc = full.total_accuracy_percent;
 
   // Healthy class: TP=pred healthy & expected healthy, FP=pred healthy & expected unhealthy
   // Unhealthy class: TP=pred unhealthy & expected unhealthy (TN in healthy-positive framing),
@@ -417,14 +481,66 @@ function buildComparisonCharts(summary) {
       <div class="comparison-head">
         <div class="comparison-title">Expected vs Predicted Comparison</div>
         <div class="comparison-note">
-          Compared rows: ${summary.comparable_rows} · Skipped (borderline/invalid expected): ${summary.skipped_rows}
+          Compared rows: ${summary.comparable_rows} · Skipped Core: ${summary.skipped_core || 0} · Skipped Full: ${summary.skipped_all || 0}
         </div>
       </div>
+
+      <div class="accuracy-grid">
+        <div class="accuracy-card">
+          <div class="accuracy-title">Core Model Total Accuracy</div>
+          <div class="accuracy-value">
+            ${coreTotalAcc === null || coreTotalAcc === undefined ? 'N/A' : `${coreTotalAcc}%`}
+          </div>
+          <div class="accuracy-formula">((TP - FP) / TP) * 100</div>
+        </div>
+        <div class="accuracy-card">
+          <div class="accuracy-title">All-Features Model Total Accuracy</div>
+          <div class="accuracy-value">
+            ${fullTotalAcc === null || fullTotalAcc === undefined ? 'N/A' : `${fullTotalAcc}%`}
+          </div>
+          <div class="accuracy-formula">((TP - FP) / TP) * 100</div>
+        </div>
+      </div>
+
       <div class="ring-grid">
         ${classRingCard('Core Healthy', coreHealthy.tp, coreHealthy.fp)}
         ${classRingCard('Core Unhealthy', coreUnhealthy.tp, coreUnhealthy.fp)}
         ${classRingCard('Full Healthy', fullHealthy.tp, fullHealthy.fp)}
         ${classRingCard('Full Unhealthy', fullUnhealthy.tp, fullUnhealthy.fp)}
+      </div>
+
+      <div class="calibration-wide">
+        <div class="calibration-title">Calibration Report</div>
+        <div class="calibration-grid">
+          <div class="calibration-card">
+            <div class="calibration-card-title">Core Model</div>
+            <div class="calibration-row">Brier Score <span>${coreCal.brier_score ?? 'N/A'}</span></div>
+            <div class="calibration-row">ECE <span>${coreCal.ece_percent ?? 'N/A'}${coreCal.ece_percent !== null && coreCal.ece_percent !== undefined ? '%' : ''}</span></div>
+            <div class="calibration-row">Avg Confidence <span>${coreCal.avg_confidence_percent ?? 'N/A'}${coreCal.avg_confidence_percent !== null && coreCal.avg_confidence_percent !== undefined ? '%' : ''}</span></div>
+            <div class="calibration-row">Observed Positive <span>${coreCal.avg_observed_positive_percent ?? 'N/A'}${coreCal.avg_observed_positive_percent !== null && coreCal.avg_observed_positive_percent !== undefined ? '%' : ''}</span></div>
+            <div class="calibration-row">Samples <span>${coreCal.sample_count ?? 0}</span></div>
+          </div>
+          <div class="calibration-card">
+            <div class="calibration-card-title">All-Features Model</div>
+            <div class="calibration-row">Brier Score <span>${fullCal.brier_score ?? 'N/A'}</span></div>
+            <div class="calibration-row">ECE <span>${fullCal.ece_percent ?? 'N/A'}${fullCal.ece_percent !== null && fullCal.ece_percent !== undefined ? '%' : ''}</span></div>
+            <div class="calibration-row">Avg Confidence <span>${fullCal.avg_confidence_percent ?? 'N/A'}${fullCal.avg_confidence_percent !== null && fullCal.avg_confidence_percent !== undefined ? '%' : ''}</span></div>
+            <div class="calibration-row">Observed Positive <span>${fullCal.avg_observed_positive_percent ?? 'N/A'}${fullCal.avg_observed_positive_percent !== null && fullCal.avg_observed_positive_percent !== undefined ? '%' : ''}</span></div>
+            <div class="calibration-row">Samples <span>${fullCal.sample_count ?? 0}</span></div>
+          </div>
+        </div>
+        <div class="cal-legend">
+          <span class="legend-item"><i class="legend-line ideal"></i>Ideal (y = x)</span>
+          <span class="legend-item"><i class="legend-line core"></i>Core</span>
+          <span class="legend-item"><i class="legend-line full"></i>All-Features</span>
+        </div>
+        <div class="calibration-chart-wrap wide">
+          ${combinedCalibrationChart(coreCal.curve_points, fullCal.curve_points)}
+        </div>
+        <div class="calibration-footnote">
+          Reliability curve for predicted vs actual healthy probability.
+        </div>
+
       </div>
     </div>
   `;
@@ -687,7 +803,7 @@ function openModal(idx) {
   const verdictColor = isBorderline ? 'var(--yellow)' : (isHealthy ? 'var(--green)' : 'var(--red)');
   const verdictWord = isBorderline ? 'BORDERLINE' : (isHealthy ? 'HEALTHY' : 'UNHEALTHY');
   const coreColor = r.core_model.is_borderline ? 'var(--yellow)' : (r.core_model.is_healthy ? 'var(--green)' : 'var(--red)');
-  const bgColor = isBorderline ? '#1a1200' : (isHealthy ? '#051a10' : '#1a0508');
+  const indicatorClass = isBorderline ? 'verdict-indicator-borderline' : (isHealthy ? 'verdict-indicator-healthy' : 'verdict-indicator-unhealthy');
 
   $modalContent.innerHTML = `
     <div style="margin-bottom:20px;">
@@ -695,8 +811,7 @@ function openModal(idx) {
       <div style="font-size:24px;font-weight:800;letter-spacing:-0.02em">${r.food_name}</div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:20px;background:${bgColor};
-      border:1px solid ${verdictColor};border-radius:10px;padding:18px 22px;margin-bottom:16px;">
+    <div class="verdict-indicator ${indicatorClass}" style="border-color:${verdictColor};">
       <div style="font-size:36px;font-weight:800;color:${verdictColor};letter-spacing:-0.03em;line-height:1">${verdictWord}</div>
       <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:2;">
         Confidence: Healthy <span style="color:var(--green);font-weight:600">${main.prob_healthy}%</span>
