@@ -234,6 +234,76 @@ def get_confusion_bucket(expected_label, predicted_label):
     return "FN"
 
 
+def safe_total_accuracy(tp, fp, tn, fn):
+    """
+    Total accuracy across both labels (same confusion matrix as the donut charts).
+
+    Uses all four cells: correct = TP + TN, incorrect = FP + FN, then
+    ((correct - incorrect) / correct) * 100.
+
+    (Using only TP/FP from the Healthy-positive slice hid FN errors, e.g. one
+    wrong Unhealthy prediction still showed 100%.)
+    """
+    total_correct = tp + tn
+    if total_correct <= 0:
+        return None
+    total_incorrect = fp + fn
+    return round(((total_correct - total_incorrect) / total_correct) * 100, 2)
+
+
+def compute_calibration_metrics(y_true, y_prob, bins=10):
+    """
+    Return calibration summary + reliability curve points for UI.
+    """
+    if len(y_true) == 0:
+        return {
+            "brier_score": None,
+            "ece_percent": None,
+            "avg_confidence_percent": None,
+            "avg_observed_positive_percent": None,
+            "sample_count": 0,
+            "curve_points": [],
+        }
+
+    y_true_arr = np.array(y_true, dtype=float)
+    y_prob_arr = np.array(y_prob, dtype=float)
+    brier = float(((y_prob_arr - y_true_arr) ** 2).mean())
+
+    edges = np.linspace(0.0, 1.0, bins + 1)
+    ece = 0.0
+    total = len(y_true_arr)
+    curve_points = []
+
+    for i in range(bins):
+        lo = edges[i]
+        hi = edges[i + 1]
+        if i == bins - 1:
+            mask = (y_prob_arr >= lo) & (y_prob_arr <= hi)
+        else:
+            mask = (y_prob_arr >= lo) & (y_prob_arr < hi)
+        if not np.any(mask):
+            continue
+        bin_true = y_true_arr[mask]
+        bin_prob = y_prob_arr[mask]
+        acc = float(np.mean(bin_true))
+        conf = float(np.mean(bin_prob))
+        ece += abs(acc - conf) * (float(np.sum(mask)) / total)
+        curve_points.append({
+            "mean_predicted_percent": round(conf * 100, 2),
+            "actual_positive_percent": round(acc * 100, 2),
+            "count": int(np.sum(mask)),
+        })
+
+    return {
+        "brier_score": round(brier, 6),
+        "ece_percent": round(ece * 100, 2),
+        "avg_confidence_percent": round(float(np.mean(y_prob_arr)) * 100, 2),
+        "avg_observed_positive_percent": round(float(np.mean(y_true_arr)) * 100, 2),
+        "sample_count": int(total),
+        "curve_points": curve_points,
+    }
+
+
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -418,6 +488,9 @@ def predict_csv():
             "comparable_rows": 0,
             "skipped_rows": 0,
         }
+        y_true_binary = []
+        core_probs = []
+        all_probs = []
         for idx, row in df.iterrows():
             food_name = str(row[name_col]) if name_col else f"Food #{idx+1}"
 
@@ -495,6 +568,9 @@ def predict_csv():
 
             if expected_label:
                 confusion["comparable_rows"] += 1
+                y_true_binary.append(1 if expected_label == "Healthy" else 0)
+                core_probs.append(float(prob_core[1]))
+                all_probs.append(float(prob_all[1]))
 
                 core_bucket = get_confusion_bucket(expected_label, core_label)
                 if core_bucket:
@@ -534,6 +610,20 @@ def predict_csv():
                 },
                 "blank_cores": blank_cores,
             })
+
+        if comparison_available:
+            cm_core = confusion["core_model"]
+            cm_all = confusion["all_model"]
+            confusion["core_model"]["total_accuracy_percent"] = safe_total_accuracy(
+                cm_core["TP"], cm_core["FP"], cm_core["TN"], cm_core["FN"]
+            )
+            confusion["all_model"]["total_accuracy_percent"] = safe_total_accuracy(
+                cm_all["TP"], cm_all["FP"], cm_all["TN"], cm_all["FN"]
+            )
+            confusion["calibration_report"] = {
+                "core_model": compute_calibration_metrics(y_true_binary, core_probs),
+                "all_model": compute_calibration_metrics(y_true_binary, all_probs),
+            }
 
         return jsonify({
             "results": results,

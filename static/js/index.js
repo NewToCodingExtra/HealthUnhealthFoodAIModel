@@ -40,36 +40,50 @@ const $calibrationCanvas = document.getElementById('calibrationChart');
 let calibrationChart = null;
 
 function renderCalibration(calib) {
-  if (!calib || !calib.core || !calib.all) return;
+  if (!calib || !calib.core_model || !calib.all_model) return;
 
   if ($calibrationCard) $calibrationCard.classList.remove('hidden');
 
-  const brierCore = calib.core.brier;
-  const brierAll = calib.all.brier;
+  const core = calib.core_model;
+  const all = calib.all_model;
+  const brierCore = Number(core.brier_score ?? 0);
+  const brierAll = Number(all.brier_score ?? 0);
 
   if ($calibrationMetrics) {
     $calibrationMetrics.innerHTML = `
-      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div style="background:var(--surface2);border:1px solid var(--border);
-          border-radius:8px;padding:8px 12px;">
-          Core Brier: <span style="color:var(--text);font-weight:800">${brierCore.toFixed(4)}</span>
+          border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:11px;">
+          <div style="font-size:10px;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;">CORE MODEL</div>
+          <div>Brier Score <span style="float:right;color:var(--text);font-weight:800">${brierCore.toFixed(6)}</span></div>
+          <div>ECE <span style="float:right;color:var(--text);font-weight:800">${Number(core.ece_percent ?? 0).toFixed(2)}%</span></div>
+          <div>Avg Confidence <span style="float:right;color:var(--text);font-weight:800">${Number(core.avg_confidence_percent ?? 0).toFixed(2)}%</span></div>
+          <div>Observed Positive <span style="float:right;color:var(--text);font-weight:800">${Number(core.avg_observed_positive_percent ?? 0).toFixed(2)}%</span></div>
+          <div>Samples <span style="float:right;color:var(--text);font-weight:800">${core.sample_count ?? 0}</span></div>
         </div>
         <div style="background:var(--surface2);border:1px solid var(--border);
-          border-radius:8px;padding:8px 12px;">
-          All Brier: <span style="color:var(--text);font-weight:800">${brierAll.toFixed(4)}</span>
+          border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:11px;">
+          <div style="font-size:10px;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;">ALL-FEATURES MODEL</div>
+          <div>Brier Score <span style="float:right;color:var(--text);font-weight:800">${brierAll.toFixed(6)}</span></div>
+          <div>ECE <span style="float:right;color:var(--text);font-weight:800">${Number(all.ece_percent ?? 0).toFixed(2)}%</span></div>
+          <div>Avg Confidence <span style="float:right;color:var(--text);font-weight:800">${Number(all.avg_confidence_percent ?? 0).toFixed(2)}%</span></div>
+          <div>Observed Positive <span style="float:right;color:var(--text);font-weight:800">${Number(all.avg_observed_positive_percent ?? 0).toFixed(2)}%</span></div>
+          <div>Samples <span style="float:right;color:var(--text);font-weight:800">${all.sample_count ?? 0}</span></div>
         </div>
       </div>
     `;
   }
 
   const toXY = (modelRel) => {
-    const x = modelRel.reliability.prob_pred || [];
-    const y = modelRel.reliability.prob_true || [];
-    return x.map((xi, i) => ({ x: xi, y: y[i] }));
+    const points = modelRel.curve_points || [];
+    return points.map(p => ({
+      x: Number(p.mean_predicted_percent || 0) / 100,
+      y: Number(p.actual_positive_percent || 0) / 100,
+    }));
   };
 
-  const coreXY = toXY(calib.core);
-  const allXY = toXY(calib.all);
+  const coreXY = toXY(core);
+  const allXY = toXY(all);
 
   const ctx = $calibrationCanvas.getContext('2d');
   if (calibrationChart) calibrationChart.destroy();
@@ -457,15 +471,10 @@ async function handleCsvFile(file) {
     $csvStatus.innerHTML = `<span style="color:var(--green)">✓ Analyzed ${data.results.length} food item${data.results.length !== 1 ? 's' : ''} from <strong>${file.name}</strong></span>`;
     renderCsvTable(data.results, csvComparisonAvailable, csvComparisonSummary);
 
-    // Model calibration is independent of CSV; fetch once per run.
-    try {
-      const calRes = await fetch('/calibration');
-      if (calRes.ok) {
-        const cal = await calRes.json();
-        renderCalibration(cal);
-      }
-    } catch (e) {
-      // UI calibration is optional; keep main results usable.
+    if (csvComparisonSummary && csvComparisonSummary.calibration_report) {
+      renderCalibration(csvComparisonSummary.calibration_report);
+    } else if ($calibrationCard) {
+      $calibrationCard.classList.add('hidden');
     }
   } catch (err) {
     $csvStatus.innerHTML = `<span style="color:var(--red)">✗ ${err.message}</span>`;
@@ -533,6 +542,22 @@ function buildComparisonCharts(summary) {
         <div class="comparison-title">Expected vs Predicted Comparison</div>
         <div class="comparison-note">
           Compared rows: ${summary.comparable_rows} · Skipped (borderline/invalid expected): ${summary.skipped_rows}
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;">
+          <div style="font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;">Core Model Total Accuracy</div>
+          <div style="font-size:48px;font-weight:800;line-height:1;color:var(--green);margin-top:8px;">
+            ${core.total_accuracy_percent === null || core.total_accuracy_percent === undefined ? 'N/A' : `${Number(core.total_accuracy_percent).toFixed(2)}%`}
+          </div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px;">((TP + TN) - (FP + FN)) / (TP + TN) * 100</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;">
+          <div style="font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;">All-Features Model Total Accuracy</div>
+          <div style="font-size:48px;font-weight:800;line-height:1;color:var(--green);margin-top:8px;">
+            ${full.total_accuracy_percent === null || full.total_accuracy_percent === undefined ? 'N/A' : `${Number(full.total_accuracy_percent).toFixed(2)}%`}
+          </div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px;">((TP + TN) - (FP + FN)) / (TP + TN) * 100</div>
         </div>
       </div>
       <div class="ring-grid">
