@@ -91,6 +91,44 @@ def build_feature_contributions(model, X_scaled, feature_names, raw_values):
     return results
 
 
+def normalize_expected_label(raw_value):
+    """Map CSV expected_output values into Healthy/Unhealthy when possible."""
+    if raw_value is None or pd.isna(raw_value):
+        return None
+
+    val = str(raw_value).strip().lower()
+    if val == "":
+        return None
+
+    healthy_tokens = {"healthy", "health", "h", "1", "true", "yes", "y", "good"}
+    unhealthy_tokens = {"unhealthy", "unhealth", "u", "0", "false", "no", "n", "bad"}
+
+    if val in healthy_tokens:
+        return "Healthy"
+    if val in unhealthy_tokens:
+        return "Unhealthy"
+    return None
+
+
+def get_confusion_bucket(expected_label, predicted_label):
+    """
+    Return TP/TN/FP/FN for Healthy-vs-Unhealthy binary comparison.
+    Borderline/unknown values return None.
+    """
+    if expected_label not in ("Healthy", "Unhealthy"):
+        return None
+    if predicted_label not in ("Healthy", "Unhealthy"):
+        return None
+
+    if predicted_label == "Healthy" and expected_label == "Healthy":
+        return "TP"
+    if predicted_label == "Unhealthy" and expected_label == "Unhealthy":
+        return "TN"
+    if predicted_label == "Healthy" and expected_label == "Unhealthy":
+        return "FP"
+    return "FN"
+
+
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -217,6 +255,7 @@ def predict_csv():
 
         # Detect food name column
         name_col = next((c for c in df.columns if c in ('name','food','food_name','item')), None)
+        expected_col = "expected_output" if "expected_output" in df.columns else None
 
         # Check which optional columns actually exist in the CSV
         # If the whole column is missing → entire column is NaN → imputer handles it
@@ -226,6 +265,13 @@ def predict_csv():
         optional_cols_missing = [f for f in optional_features if f not in df.columns]
 
         results = []
+        comparison_available = expected_col is not None
+        confusion = {
+            "core_model": {"TP": 0, "TN": 0, "FP": 0, "FN": 0},
+            "all_model": {"TP": 0, "TN": 0, "FP": 0, "FN": 0},
+            "comparable_rows": 0,
+            "skipped_rows": 0,
+        }
         for idx, row in df.iterrows():
             food_name = str(row[name_col]) if name_col else f"Food #{idx+1}"
 
@@ -288,8 +334,26 @@ def predict_csv():
             core_label, core_is_healthy, core_borderline = get_verdict(float(prob_core[1]))
             all_label,  all_is_healthy,  all_borderline  = get_verdict(float(prob_all[1]))
 
+            expected_label = normalize_expected_label(row[expected_col]) if expected_col else None
+            core_match = expected_label == core_label if expected_label else None
+            all_match = expected_label == all_label if expected_label else None
+
+            if expected_label:
+                confusion["comparable_rows"] += 1
+
+                core_bucket = get_confusion_bucket(expected_label, core_label)
+                if core_bucket:
+                    confusion["core_model"][core_bucket] += 1
+                else:
+                    confusion["skipped_rows"] += 1
+
+                all_bucket = get_confusion_bucket(expected_label, all_label)
+                if all_bucket:
+                    confusion["all_model"][all_bucket] += 1
+
             results.append({
                 "food_name":  food_name,
+                "expected_output": expected_label,
                 "core_model": {
                     "label":         core_label,
                     "is_healthy":    core_is_healthy,
@@ -306,10 +370,18 @@ def predict_csv():
                     "prob_unhealthy":round(float(prob_all[0]) * 100, 1),
                     "features":      build_feature_contributions(models['all'], X_all_scaled, all_features, all_vals),
                 },
+                "comparison": {
+                    "core_match": core_match,
+                    "all_match": all_match,
+                },
                 "blank_cores": blank_cores,
             })
 
-        return jsonify({"results": results})
+        return jsonify({
+            "results": results,
+            "comparison_available": comparison_available,
+            "comparison_summary": confusion if comparison_available else None,
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

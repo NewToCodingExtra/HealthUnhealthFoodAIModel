@@ -306,6 +306,8 @@ function switchTab(tab) {
 }
 
 let csvResultsData = [];
+let csvComparisonAvailable = false;
+let csvComparisonSummary = null;
 
 const $csvDrop = document.getElementById('csv-drop');
 const $csvFileInput = document.getElementById('csv-file-input');
@@ -313,6 +315,7 @@ const $csvStatus = document.getElementById('csv-status');
 const $csvResultsWrap = document.getElementById('csv-results-wrap');
 const $csvTableBody = document.getElementById('csv-table-body');
 const $csvSummary = document.getElementById('csv-summary');
+const $csvComparisonSummary = document.getElementById('csv-comparison-summary');
 
 $csvDrop.addEventListener('dragover',  e => { e.preventDefault(); $csvDrop.classList.add('drag-over'); });
 $csvDrop.addEventListener('dragleave', ()  => $csvDrop.classList.remove('drag-over'));
@@ -345,8 +348,10 @@ async function handleCsvFile(file) {
     if (data.error) throw new Error(data.error);
 
     csvResultsData = data.results;
+    csvComparisonAvailable = !!data.comparison_available;
+    csvComparisonSummary = data.comparison_summary || null;
     $csvStatus.innerHTML = `<span style="color:var(--green)">✓ Analyzed ${data.results.length} food item${data.results.length !== 1 ? 's' : ''} from <strong>${file.name}</strong></span>`;
-    renderCsvTable(data.results);
+    renderCsvTable(data.results, csvComparisonAvailable, csvComparisonSummary);
   } catch (err) {
     $csvStatus.innerHTML = `<span style="color:var(--red)">✗ ${err.message}</span>`;
   }
@@ -356,7 +361,83 @@ function verdictChip(label) {
   return `<span class="verdict-chip ${label.toLowerCase()}">${label.toUpperCase()}</span>`;
 }
 
-function renderCsvTable(results) {
+function comparisonChip(match) {
+  if (match === true) return '<span class="compare-chip match">MATCH</span>';
+  if (match === false) return '<span class="compare-chip mismatch">MISMATCH</span>';
+  return '<span class="compare-chip na">N/A</span>';
+}
+
+function ringCard(metric, coreCount, allCount, maxCount, colorClass) {
+  const pct = maxCount > 0 ? Math.max((Math.max(coreCount, allCount) / maxCount) * 100, 6) : 0;
+  return `
+    <div class="ring-card">
+      <div class="ring ${colorClass}" style="--pct:${pct}%;">
+        <div class="ring-inner">${metric}</div>
+      </div>
+      <div class="ring-meta">
+        <div class="ring-row">Core: <span>${coreCount}</span></div>
+        <div class="ring-row">Full: <span>${allCount}</span></div>
+      </div>
+    </div>
+  `;
+}
+
+function classRingCard(title, tpCount, fpCount, maxCount, colorClass) {
+  const pct = maxCount > 0 ? Math.max(((tpCount + fpCount) / maxCount) * 100, 6) : 0;
+  return `
+    <div class="ring-card">
+      <div class="ring ${colorClass}" style="--pct:${pct}%;">
+        <div class="ring-inner">${title}</div>
+      </div>
+      <div class="ring-meta">
+        <div class="ring-row">TP: <span>${tpCount}</span></div>
+        <div class="ring-row">FP: <span>${fpCount}</span></div>
+      </div>
+    </div>
+  `;
+}
+
+function buildComparisonCharts(summary) {
+  if (!summary) return '';
+
+  const core = summary.core_model || { TP: 0, TN: 0, FP: 0, FN: 0 };
+  const full = summary.all_model || { TP: 0, TN: 0, FP: 0, FN: 0 };
+
+  // Healthy class: TP=pred healthy & expected healthy, FP=pred healthy & expected unhealthy
+  // Unhealthy class: TP=pred unhealthy & expected unhealthy (TN in healthy-positive framing),
+  //                  FP=pred unhealthy & expected healthy (FN in healthy-positive framing)
+  const coreHealthy = { tp: core.TP, fp: core.FP };
+  const coreUnhealthy = { tp: core.TN, fp: core.FN };
+  const fullHealthy = { tp: full.TP, fp: full.FP };
+  const fullUnhealthy = { tp: full.TN, fp: full.FN };
+
+  const maxCount = Math.max(
+    coreHealthy.tp + coreHealthy.fp,
+    coreUnhealthy.tp + coreUnhealthy.fp,
+    fullHealthy.tp + fullHealthy.fp,
+    fullUnhealthy.tp + fullUnhealthy.fp,
+    1
+  );
+
+  return `
+    <div class="comparison-wrap">
+      <div class="comparison-head">
+        <div class="comparison-title">Expected vs Predicted Comparison</div>
+        <div class="comparison-note">
+          Compared rows: ${summary.comparable_rows} · Skipped (borderline/invalid expected): ${summary.skipped_rows}
+        </div>
+      </div>
+      <div class="ring-grid">
+        ${classRingCard('Core Healthy', coreHealthy.tp, coreHealthy.fp, maxCount, 'ring-green')}
+        ${classRingCard('Core Unhealthy', coreUnhealthy.tp, coreUnhealthy.fp, maxCount, 'ring-red')}
+        ${classRingCard('Full Healthy', fullHealthy.tp, fullHealthy.fp, maxCount, 'ring-green')}
+        ${classRingCard('Full Unhealthy', fullUnhealthy.tp, fullUnhealthy.fp, maxCount, 'ring-red')}
+      </div>
+    </div>
+  `;
+}
+
+function renderCsvTable(results, comparisonAvailable = false, comparisonSummary = null) {
   const counts = { Healthy: 0, Unhealthy: 0, Borderline: 0 };
   results.forEach(r => { counts[r.all_model.label] = (counts[r.all_model.label] || 0) + 1; });
 
@@ -372,12 +453,41 @@ function renderCsvTable(results) {
       <span style="font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-top:4px">${label}</span>
     </div>`).join('');
 
+  $csvComparisonSummary.innerHTML = comparisonAvailable
+    ? buildComparisonCharts(comparisonSummary)
+    : '';
+
+  const $csvHeaderRow = document.querySelector('.csv-table thead tr');
+  if ($csvHeaderRow) {
+    $csvHeaderRow.innerHTML = comparisonAvailable ? `
+      <th>#</th>
+      <th>Food Name</th>
+      <th>Expected</th>
+      <th>Core Model</th>
+      <th>Core Match</th>
+      <th>All-Features Model</th>
+      <th>All Match</th>
+      <th>Confidence (Healthy)</th>
+      <th>Details</th>
+    ` : `
+      <th>#</th>
+      <th>Food Name</th>
+      <th>Core Model</th>
+      <th>All-Features Model</th>
+      <th>Confidence (Healthy)</th>
+      <th>Details</th>
+    `;
+  }
+
   $csvTableBody.innerHTML = results.map((r, i) => `
     <tr>
       <td style="color:var(--muted)">${i + 1}</td>
       <td style="color:var(--text);font-weight:600">${r.food_name}</td>
+      ${comparisonAvailable ? `<td>${r.expected_output ? verdictChip(r.expected_output) : '<span style="color:var(--muted)">N/A</span>'}</td>` : ''}
       <td>${verdictChip(r.core_model.label)}</td>
+      ${comparisonAvailable ? `<td>${comparisonChip(r.comparison ? r.comparison.core_match : null)}</td>` : ''}
       <td>${verdictChip(r.all_model.label)}</td>
+      ${comparisonAvailable ? `<td>${comparisonChip(r.comparison ? r.comparison.all_match : null)}</td>` : ''}
       <td>
         <span style="color:var(--green);font-weight:600">${r.all_model.prob_healthy}%</span>
         <span style="color:var(--muted);font-size:9px"> healthy</span>
