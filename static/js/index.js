@@ -79,6 +79,7 @@ function renderCalibration(calib) {
     return points.map(p => ({
       x: Number(p.mean_predicted_percent || 0) / 100,
       y: Number(p.actual_positive_percent || 0) / 100,
+      n: p.count,
     }));
   };
 
@@ -110,7 +111,7 @@ function renderCalibration(calib) {
           pointRadius: 3,
           pointHoverRadius: 4,
           borderWidth: 2,
-          tension: 0.25,
+          tension: 0.2,
         },
         {
           label: `All (Brier ${brierAll.toFixed(3)})`,
@@ -120,7 +121,7 @@ function renderCalibration(calib) {
           pointRadius: 3,
           pointHoverRadius: 4,
           borderWidth: 2,
-          tension: 0.25,
+          tension: 0.2,
         }
       ]
     },
@@ -128,7 +129,16 @@ function renderCalibration(calib) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: muted } }
+        legend: { labels: { color: muted } },
+        tooltip: {
+          callbacks: {
+            afterLabel(ctx) {
+              const raw = ctx.raw;
+              if (raw && raw.n != null) return `Rows in bin: ${raw.n}`;
+              return '';
+            }
+          }
+        }
       },
       scales: {
         x: {
@@ -878,9 +888,7 @@ function openModal(idx) {
     </div>
 
     <div class="modal-sticky-body">
-      <div style="overflow-x:auto;">
-        ${buildContribTable(main.features)}
-      </div>
+      ${buildContribTable(main.features)}
     </div>
   `;
 

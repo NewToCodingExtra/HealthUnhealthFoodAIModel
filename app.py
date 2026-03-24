@@ -251,9 +251,13 @@ def safe_total_accuracy(tp, fp, tn, fn):
     return round(((total_correct - total_incorrect) / total_correct) * 100, 2)
 
 
-def compute_calibration_metrics(y_true, y_prob, bins=10):
+def compute_calibration_metrics(y_true, y_prob, bins=8):
     """
     Return calibration summary + reliability curve points for UI.
+
+    Brier uses all rows. ECE and the curve use quantile (equal-frequency) bins
+    so each point aggregates enough labels to avoid 0/1 spikes from sparse
+    equal-width bins on small CSVs.
     """
     if len(y_true) == 0:
         return {
@@ -263,44 +267,51 @@ def compute_calibration_metrics(y_true, y_prob, bins=10):
             "avg_observed_positive_percent": None,
             "sample_count": 0,
             "curve_points": [],
+            "binning": "quantile",
         }
 
     y_true_arr = np.array(y_true, dtype=float)
     y_prob_arr = np.array(y_prob, dtype=float)
     brier = float(((y_prob_arr - y_true_arr) ** 2).mean())
 
-    edges = np.linspace(0.0, 1.0, bins + 1)
+    n = len(y_true_arr)
+    n_bins = min(bins, max(3, n // 5))
+    n_bins = max(3, min(n_bins, n))
+
+    order = np.argsort(y_prob_arr)
+    sorted_true = y_true_arr[order]
+    sorted_prob = y_prob_arr[order]
+
     ece = 0.0
-    total = len(y_true_arr)
     curve_points = []
 
-    for i in range(bins):
-        lo = edges[i]
-        hi = edges[i + 1]
-        if i == bins - 1:
-            mask = (y_prob_arr >= lo) & (y_prob_arr <= hi)
-        else:
-            mask = (y_prob_arr >= lo) & (y_prob_arr < hi)
-        if not np.any(mask):
+    for b in range(n_bins):
+        lo = int(b * n / n_bins)
+        hi = int((b + 1) * n / n_bins) if b < n_bins - 1 else n
+        if lo >= hi:
             continue
-        bin_true = y_true_arr[mask]
-        bin_prob = y_prob_arr[mask]
+        bin_true = sorted_true[lo:hi]
+        bin_prob = sorted_prob[lo:hi]
         acc = float(np.mean(bin_true))
         conf = float(np.mean(bin_prob))
-        ece += abs(acc - conf) * (float(np.sum(mask)) / total)
+        cnt = hi - lo
+        ece += abs(acc - conf) * (float(cnt) / n)
         curve_points.append({
             "mean_predicted_percent": round(conf * 100, 2),
             "actual_positive_percent": round(acc * 100, 2),
-            "count": int(np.sum(mask)),
+            "count": int(cnt),
         })
+
+    curve_points.sort(key=lambda p: p["mean_predicted_percent"])
 
     return {
         "brier_score": round(brier, 6),
         "ece_percent": round(ece * 100, 2),
         "avg_confidence_percent": round(float(np.mean(y_prob_arr)) * 100, 2),
         "avg_observed_positive_percent": round(float(np.mean(y_true_arr)) * 100, 2),
-        "sample_count": int(total),
+        "sample_count": int(n),
         "curve_points": curve_points,
+        "binning": "quantile",
     }
 
 
